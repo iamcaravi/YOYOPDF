@@ -41,7 +41,9 @@
   let __fallbackExportUrl = null;
   let __printUrl = null;
   let __printFrame = null;
+  let __printStyleEl = null;
   let __printCleanupTimer = null;
+  let __printListenerActive = false;
   let currentFileName = '';
   let documentGeneration = 0;
   let exportController = null;
@@ -415,37 +417,84 @@
     return result;
   }
 
+  /* Root cause of the intermittent "Failed to read a named property
+     'print' from 'Window': Blocked a frame with origin ... from
+     accessing a cross-origin frame" error this replaces: the previous
+     implementation called `frame.contentWindow.focus()` /
+     `frame.contentWindow.print()` directly on the print iframe. Even
+     though `frame.src` is a same-origin `blob:` URL created by this exact
+     document, Chromium's built-in PDF viewer can render that blob's
+     `application/pdf` content in its own internal security context - at
+     that point `contentWindow` is no longer a Window this document is
+     allowed to read named properties from, and the browser throws exactly
+     the reported SecurityError. This is intermittent because it depends
+     on Chromium's own internal handling of that PDF-viewer frame for a
+     given navigation, not on anything this code controls - so no amount
+     of try/catch around the same unsafe call fixes it.
+     The fix removes cross-frame Window access entirely: this document's
+     OWN `window.print()` (always same-origin, since it is this document)
+     is called instead, and a print-only stylesheet - injected only for
+     the duration of the print, removed in cleanup - hides the rest of the
+     editor shell so only the iframe (showing the edited PDF, still
+     rendered by the browser's own PDF viewer) actually prints. This is
+     the standard, cross-browser-safe pattern for printing embedded PDF
+     content without ever reading a property off another frame's Window. */
   function cleanupPrintSurface() {
     if (__printCleanupTimer) clearTimeout(__printCleanupTimer);
     __printCleanupTimer = null;
+    if (__printListenerActive) window.removeEventListener('afterprint', cleanupPrintSurface);
+    __printListenerActive = false;
     __printFrame?.remove();
     __printFrame = null;
+    __printStyleEl?.remove();
+    __printStyleEl = null;
     if (__printUrl) URL.revokeObjectURL(__printUrl);
     __printUrl = null;
   }
 
   async function performPrint(operation) {
-    const result = await buildEditedPdf(operation, 'Preparing edited PDF for printing…');
+    const result = await buildEditedPdf(operation, t('editor.statusPreparingPrint'));
     operation.throwIfStale();
     cleanupPrintSurface();
     __printUrl = URL.createObjectURL(result.blob);
     const frame = document.createElement('iframe');
+    frame.className = 'editor-print-frame';
     frame.setAttribute('aria-hidden','true');
     frame.style.cssText='position:fixed;left:-10000px;top:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
     frame.src = __printUrl;
     __printFrame = frame;
     document.body.appendChild(frame);
+
+    // Scoped to `@media print` only - has zero effect on the normal
+    // editor UI, and only exists in the DOM for the duration of this one
+    // print (removed by cleanupPrintSurface()). Hiding every OTHER direct
+    // child of <body> (nav/toolbar/panels/dock/etc. all already live
+    // there) and expanding the iframe to fill the printed page is what
+    // keeps the printed output to just the PDF, per the brief's "do not
+    // print the editor shell" requirement - without needing to touch any
+    // cross-origin frame to achieve it.
+    const style = document.createElement('style');
+    style.textContent = '@media print { body > *:not(.editor-print-frame){display:none !important;} .editor-print-frame{position:static !important; left:auto !important; top:auto !important; width:100% !important; height:100vh !important; opacity:1 !important;} }';
+    document.head.appendChild(style);
+    __printStyleEl = style;
+
     await new Promise((resolve,reject)=>{
       const timer=setTimeout(resolve,1800);
       frame.onload=()=>{clearTimeout(timer);setTimeout(resolve,250);};
-      frame.onerror=()=>{clearTimeout(timer);reject(new Error('The edited PDF could not be prepared for printing.'));};
+      frame.onerror=()=>{clearTimeout(timer);reject(new Error(t('editor.errPrintSurfaceFailed')));};
     });
     operation.throwIfStale();
-    if (!frame.contentWindow) throw new Error('The browser print surface is unavailable.');
-    frame.contentWindow.focus();
-    frame.contentWindow.print();
-    exportStatus('Print dialog opened for the edited PDF.');
+
+    // afterprint fires once the browser's print dialog closes, whether
+    // the user actually printed or cancelled it (Chrome/Edge/Firefox) -
+    // the primary cleanup trigger. The timeout below is only the
+    // fallback safety net for a browser/scenario where that event
+    // somehow never fires, same role the old fixed 60s timer already had.
+    window.addEventListener('afterprint', cleanupPrintSurface, { once:true });
+    __printListenerActive = true;
     __printCleanupTimer=setTimeout(cleanupPrintSurface,60000);
+    window.print();
+    exportStatus(t('editor.statusPrintReady'));
     return result;
   }
 
@@ -453,6 +502,19 @@
     const message = error?.message || t('editor.errExportFailed');
     console.error('EditorExport:', error);
     exportStatus(t('editor.statusExportFailed', { message }));
+    if(typeof window.toast === 'function') window.toast(message);
+  }
+
+  /* Deliberately separate from reportExportFailure(): a failure while
+     printing must never be shown as "Export failed" (Save uses that
+     wording; Print did not fail to export anything if buildEditedPdf()
+     itself succeeded - the failure, if any, is in preparing/opening the
+     print surface). Keeping two reporters is what makes that distinction
+     possible without the two flows' status text getting tangled. */
+  function reportPrintFailure(error) {
+    const message = error?.message || t('editor.errPrintFailed');
+    console.error('EditorExport (print):', error);
+    exportStatus(t('editor.statusPrintFailed', { message }));
     if(typeof window.toast === 'function') window.toast(message);
   }
 
@@ -473,13 +535,18 @@
   }
 
   function printCurrentDocument() {
+    // printController.run() already returns `undefined` without starting
+    // a new operation while a previous one is still `busy` (see
+    // createOperationController in pdf-processing-utils.js) - rapid
+    // repeated Print clicks are covered by that existing guard, not a new
+    // debounce mechanism here.
     if(printController){
-      return printController.run(performPrint, {timeoutMs:120000}).catch(reportExportFailure);
+      return printController.run(performPrint, {timeoutMs:120000}).catch(reportPrintFailure);
     }
     if(fallbackPrintPromise) return fallbackPrintPromise;
     const context={isCurrent:()=>true,throwIfStale:()=>{}};
     fallbackPrintPromise=performPrint(context)
-      .catch(reportExportFailure)
+      .catch(reportPrintFailure)
       .finally(()=>{fallbackPrintPromise=null;});
     return fallbackPrintPromise;
   }

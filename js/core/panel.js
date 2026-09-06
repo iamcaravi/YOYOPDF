@@ -32,7 +32,34 @@ panel.addEventListener("click", (e)=>{
    left as a single column, unchanged. */
 function layoutTwoColumn(){
   const body = document.querySelector(".panel-body");
-  if(!body || body.querySelector(".tool-layout")) return;
+  if(!body) return;
+  // Bespoke .tool-app-shell tools (Split/Organize/Rotate/Delete/Extract/
+  // etc) build their own two-column .tool-app-workspace/.tool-side-panel
+  // by hand instead of going through the auto-layout below, but still
+  // want the SAME "tool name + description at the top of the right
+  // panel" iLovePDF gives its sidebar - reads from the one .tool-hero
+  // already in every tool's template (same source the auto-layout
+  // system reparents below) instead of duplicating that copy a second
+  // time in ~19 separate TOOLS.xxx functions. A CLONE, not a move: every
+  // one of those ~19 functions already toggles the ORIGINAL .tool-hero's
+  // own inline style.display directly (empty-state show/hide, e.g.
+  // Split's own hero.style.display="none" once a file loads) - moving
+  // the real node into the sidebar would still leave it subject to that
+  // per-tool inline toggling and go blank the moment a file loads
+  // (confirmed live: exactly what happened before switching to a
+  // clone). A static copy of its title+description markup, inserted
+  // once and left alone, sidesteps that entirely without touching any
+  // of those 19 call sites. Guarded so a re-run (layoutTwoColumn() fires
+  // on every openPanel()) never inserts a second copy.
+  const sidePanel = body.querySelector(".tool-side-panel");
+  const shellHero = body.querySelector(".tool-hero");
+  if(sidePanel && shellHero && !sidePanel.querySelector(".tool-sidebar-hero")){
+    const sidebarHero = document.createElement("div");
+    sidebarHero.className = "tool-hero tool-sidebar-hero";
+    sidebarHero.innerHTML = shellHero.innerHTML;
+    sidePanel.prepend(sidebarHero);
+  }
+  if(body.querySelector(".tool-layout")) return;
   // Opt-out for tools building their own bespoke page-grid + sidebar
   // workspace by hand (Split/Organize/Rotate/etc, marked .tool-app-shell)
   // instead of the shared auto-layout below.

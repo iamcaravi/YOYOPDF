@@ -38,6 +38,18 @@ TOOLS.merge = function(){
       badge.textContent = i+1;
     });
     flistDrag.rewire();
+    // wireFileCardDrag()'s own click handler already no-ops a move past
+    // either end (index/target bounds check) - this just SHOWS that same
+    // boundary up front (disabled + a merge-specific aria-label) instead
+    // of a control that silently does nothing when pressed at the first/
+    // last position.
+    const cards = document.querySelectorAll("#flist .file-card");
+    cards.forEach((card,i)=>{
+      const left = card.querySelector('.file-card-order-controls button[data-move="-1"]');
+      const right = card.querySelector('.file-card-order-controls button[data-move="1"]');
+      if(left){ left.disabled = i===0; left.setAttribute("aria-label", t("toolMerge.moveLeft")); }
+      if(right){ right.disabled = i===cards.length-1; right.setAttribute("aria-label", t("toolMerge.moveRight")); }
+    });
     document.getElementById("go").disabled = files.length<2;
     document.getElementById("mergeToolbar").style.display = files.length ? "flex" : "none";
     document.getElementById("mergeFileToolbar").style.display = files.length ? "flex" : "none";
@@ -193,7 +205,7 @@ TOOLS.split = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
   function showError(msg){
@@ -921,7 +933,7 @@ TOOLS.rotate = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -1056,7 +1068,7 @@ TOOLS.deletepages = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -1261,7 +1273,7 @@ TOOLS.extractpages = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -1399,7 +1411,7 @@ TOOLS.reorder = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -1506,7 +1518,7 @@ TOOLS.addblank = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
   // Keeps the position field bounded to the grid's current card count
@@ -1657,7 +1669,7 @@ TOOLS.pagenumbers = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
   function showError(msg){
@@ -1912,7 +1924,7 @@ TOOLS.watermark = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
   function showError(msg){

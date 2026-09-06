@@ -72,7 +72,7 @@ TOOLS.headerfooter = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
   function showError(msg){
@@ -331,7 +331,7 @@ TOOLS.crop = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
     motionEnter([document.querySelector(".crop-side-panel")], {fromY:10, duration:MOTION.fast});
   }
@@ -966,7 +966,7 @@ TOOLS.organize = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -1153,19 +1153,44 @@ TOOLS.pdf2jpg = function(){
     const pdoc = operation.track(await loadPdfJsSafe({data:bytes}));
     const zip = new JSZip();
     let firstBlob=null;
+    // Pages are converted one at a time, never in parallel (no
+    // Promise.all over pdoc.numPages) - a big/complex page already needs
+    // the CPU and memory to itself; rendering several at once would only
+    // make every one of them slower and more likely to look "hung", not
+    // faster. Tracked outside the try so the catch below can report which
+    // page actually failed - the for loop's own `let i` isn't reachable
+    // from a catch outside that loop.
+    let currentPage = 0;
     try{
       for(let i=1;i<=pdoc.numPages;i++){
-        setStatus(t("toolPdf2jpg.statusRenderingPages"), false, Math.round((i/pdoc.numPages)*100));
+        currentPage = i;
+        setStatus(t("toolPdf2jpg.statusConvertingPage", {n:i, total:pdoc.numPages}), false, Math.round((i/pdoc.numPages)*100));
         // renderPdfPageCanvas(), not a raw page.render() - see Invert PDF
         // Colors' identical comment for why a hang here must reject
-        // instead of freezing this loop forever.
+        // instead of freezing this loop forever. Its timeout is adaptive
+        // to this page's actual rendered size (see
+        // adaptivePageRenderTimeoutMs in pdf-canvas-widgets.js) rather
+        // than one flat value too short for large/complex pages - that
+        // was the real cause of valid PDFs being misreported as broken.
         const canvas = await renderPdfPageCanvas(pdoc, i, 2);
         const blob = await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.92));
         if(i===1) firstBlob=blob;
         zip.file(`page_${i}.jpg`, blob);
+        // Canvas is large (page pixels x scale 2) and otherwise only goes
+        // out of scope at the next loop iteration - on mobile, dropping
+        // the reference immediately (rather than waiting for the next
+        // assignment to `canvas`) gives the GC an earlier, clearer signal
+        // that this page's memory is free, instead of holding N pages'
+        // worth of canvases "one iteration too long" in the interpreter's
+        // own temporaries across a long conversion.
+        canvas.width = 0; canvas.height = 0;
       }
     }catch(e){
-      out.innerHTML = `<div class="status" style="color:var(--rose)">${t("toolPdf2jpg.errCouldNotRender", {msg: escapeAttr(e.message)})}</div>`;
+      console.error("PDF to JPG: page " + currentPage + " of " + pdoc.numPages + " failed", e);
+      const message = e && e.message === "Page render timed out"
+        ? t("toolPdf2jpg.errPageTimedOut", {page: currentPage})
+        : t("toolPdf2jpg.errCouldNotRender", {msg: escapeAttr(e.message)});
+      out.innerHTML = `<div class="status" style="color:var(--rose)">${message}</div>`;
       return;
     }
     setStatus(T("workspace.statusPreparingDownload"));

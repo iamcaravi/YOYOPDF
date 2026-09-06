@@ -85,7 +85,7 @@ TOOLS.imgcompress = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -174,7 +174,7 @@ TOOLS.imgresize = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -346,7 +346,7 @@ TOOLS.imgcrop = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
     motionEnter([document.querySelector(".imgcrop-side-panel")], {fromY:10, duration:MOTION.fast});
   }
@@ -713,7 +713,7 @@ TOOLS.imgconvert = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -787,7 +787,7 @@ TOOLS.imgwatermark = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -881,7 +881,7 @@ TOOLS.imginvert = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 

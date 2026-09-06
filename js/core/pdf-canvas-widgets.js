@@ -141,39 +141,89 @@ async function pdfThumb(bytes, pageNum=1, maxH=110, timeoutMs=8000){
   }
 }
 /**
+ * How long a single page render gets before it's treated as hung, when a
+ * caller doesn't pass an explicit timeoutMs. A flat 10s (the old default)
+ * was too aggressive for perfectly healthy pages: page.render() cost
+ * scales with the actual pixel count of the target canvas (a big page at
+ * a real conversion scale like 2x can be several times the pixel area of
+ * a typical page at 1x), and a mid-range/thermal-throttled mobile CPU can
+ * genuinely need well over 10s for a normal, non-broken page in that
+ * range - which is exactly what was misreported as "Page render timed
+ * out. Try a different file." for perfectly valid PDFs (confirmed: that
+ * exact string is renderPdfPageCanvas's own timeout Error, only ever
+ * seen by users via toolPdf2jpg.errCouldNotRender's {{msg}}).
+ * Deliberately still bounded (not "wait forever") - page.render() has
+ * been observed elsewhere in this app to hang indefinitely rather than
+ * erroring on some inputs, so a safety net is still genuinely needed;
+ * this only recalibrates it to scale with actual rendering cost instead
+ * of one constant regardless of page size.
+ * @param {number} widthPx
+ * @param {number} heightPx
+ */
+function adaptivePageRenderTimeoutMs(widthPx, heightPx){
+  // BASE_MS alone (a standard US-Letter/A4 page at a real conversion
+  // scale like 2x is only ~1.9 megapixels - just above FREE_MEGAPIXELS,
+  // so it's mostly this base that actually protects it) already covers
+  // more than double the old flat 10s, since render COST for an
+  // ordinary page isn't only pixel count - font/vector/annotation
+  // complexity matters just as much and isn't measurable up front. The
+  // per-megapixel term on top of that specifically covers large-format
+  // pages (posters, architectural drawings, big scanned sheets), which
+  // do need materially more time than a normal page at the same scale.
+  const BASE_MS = 25000;
+  const FREE_MEGAPIXELS = 1.5;
+  const MS_PER_EXTRA_MEGAPIXEL = 6000;
+  const MAX_MS = 90000;             // still a hard ceiling - a genuinely hung render must not wait forever
+  const megapixels = (widthPx * heightPx) / 1e6;
+  const extra = Math.max(0, megapixels - FREE_MEGAPIXELS) * MS_PER_EXTRA_MEGAPIXEL;
+  return Math.min(MAX_MS, Math.round(BASE_MS + extra));
+}
+/**
  * Renders one PDF page to a canvas at an explicit scale (page-grid
- * thumbnails, image-fallback conversion paths). Unlike pdfThumb(), this
- * throws on timeout rather than swallowing - page.render() has been
- * observed elsewhere in this app to hang indefinitely (never resolving
- * or rejecting) rather than erroring, on some inputs/environments, same
- * category of issue pdfThumb() was fixed for earlier - but some callers
- * here use the rendered image as the actual deliverable, not just an
- * optional preview, so they need to decide how to handle a failure
- * themselves rather than silently getting nothing back.
+ * thumbnails, image-fallback conversion paths, PDF-to-JPG). Unlike
+ * pdfThumb(), this throws on timeout rather than swallowing - page.render()
+ * has been observed elsewhere in this app to hang indefinitely (never
+ * resolving or rejecting) rather than erroring, on some inputs/
+ * environments, same category of issue pdfThumb() was fixed for earlier -
+ * but some callers here use the rendered image as the actual deliverable,
+ * not just an optional preview, so they need to decide how to handle a
+ * failure themselves rather than silently getting nothing back.
  * @param {import("pdfjs-dist").PDFDocumentProxy} pdoc
  * @param {number} pageNum - 1-based page to render.
  * @param {number} scale - pdf.js viewport scale.
- * @param {number} [timeoutMs=10000]
+ * @param {number} [timeoutMs] - explicit override; omit to use
+ *   adaptivePageRenderTimeoutMs() based on this page's actual rendered
+ *   pixel dimensions (every current caller omits this and gets the
+ *   adaptive value - see that function's own comment for why).
  * @returns {Promise<HTMLCanvasElement>} rejects on timeout.
  */
-async function renderPdfPageCanvas(pdoc, pageNum, scale, timeoutMs=10000){
+async function renderPdfPageCanvas(pdoc, pageNum, scale, timeoutMs=null){
   const page = await pdoc.getPage(pageNum);
   const vp = page.getViewport({scale});
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(vp.width));
   canvas.height = Math.max(1, Math.round(vp.height));
+  const effectiveTimeoutMs = timeoutMs != null ? timeoutMs : adaptivePageRenderTimeoutMs(canvas.width, canvas.height);
   const renderTask = page.render({canvasContext:canvas.getContext("2d"), viewport:vp});
   let timeoutId = null;
+  let timedOut = false;
   try{
     await Promise.race([
       renderTask.promise,
       new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Page render timed out")), timeoutMs);
+        timeoutId = setTimeout(() => { timedOut = true; reject(new Error("Page render timed out")); }, effectiveTimeoutMs);
       })
     ]);
     return canvas;
   }catch(error){
     try{ renderTask.cancel(); }catch(_){}
+    // If this was a genuine timeout, renderTask.promise is still pending
+    // (or about to reject with pdf.js's own RenderingCancelledException
+    // from the cancel() call just above) and nothing else will ever await
+    // it - left alone that surfaces as an unhandled promise rejection in
+    // the console on every single timeout, unrelated noise on top of the
+    // real error already being thrown here.
+    if(timedOut) renderTask.promise.catch(()=>{});
     throw error;
   }finally{
     if(timeoutId) clearTimeout(timeoutId);

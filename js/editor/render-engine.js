@@ -228,10 +228,148 @@
           ascent, descent, direction:item.dir || 'ltr', vertical:!!style.vertical
         };
       });
-      return {width:viewport.width,height:viewport.height,rotation:viewport.rotation,items};
+      return {width:viewport.width,height:viewport.height,rotation:viewport.rotation,items:groupTextItems(items)};
     })();
     textLayoutCache.set(pageNumber,promise);
     return promise;
+  }
+
+  /** Root cause of the "one editable box per word" problem this function
+   *  fixes: pdf.js's own getTextContent() returns one TextItem per
+   *  content-stream text-showing operator, which many real-world PDFs
+   *  (especially form-generated ones, e.g. tax acknowledgements) emit
+   *  once per word or short run - never once per visual line. Everything
+   *  downstream of this file (editor-content.js's hit-boxes, the
+   *  EditorTextLayout reflow/collision planner, and PDF export in
+   *  editor-export.js, which only ever draws a cover-rectangle over
+   *  data.sourceBox + the new text - it never touches the PDF's original
+   *  content-stream operators) already works purely off of each item's
+   *  bounding box and never assumed a 1:1 correspondence with a raw
+   *  pdf.js item, so merging happens exactly once, here, at the source -
+   *  every consumer benefits automatically with no changes of its own.
+   *
+   *  Greedy left-to-right run building per visual row: repeatedly extend
+   *  the current run with whichever remaining item is the nearest
+   *  same-row neighbor to its right, stopping the run (not skipping past
+   *  the gap) the moment that neighbor fails to look like normal
+   *  in-line text flow. Adaptive to font size (not one fixed pixel gap),
+   *  so it works the same at any PDF size/zoom - callers only ever see
+   *  this in PDF point-space (scale 1), never CSS/zoomed pixels.
+   *
+   *  Deliberately conservative about what it merges: a large horizontal
+   *  gap (table cell/column boundary), a real font-size mismatch, or any
+   *  rotation/vertical text keeps items separate - see canMergeAdjacent()
+   *  and the rotated-text carve-out below. Under-merging only costs a
+   *  user one extra click to select an adjacent run; over-merging would
+   *  silently corrupt a table (exactly what the "PAN / HEGPS2973D" and
+   *  "Name / JITENDRA PRATAP SINGH" cases in the brief this was built
+   *  against warn against), so every threshold here errs toward keeping
+   *  genuinely separate content separate.
+   */
+  function isSameTextRow(a, b) {
+    const overlap = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    if (overlap >= Math.min(a.height, b.height) * 0.42) return true;
+    const refSize = Math.max(1, Math.max(a.fontSize, b.fontSize));
+    return Math.abs((a.baseline ?? a.y + a.height) - (b.baseline ?? b.y + b.height)) <= Math.max(2, refSize * 0.3);
+  }
+
+  function canMergeAdjacent(last, cand) {
+    const gap = cand.x - (last.x + last.width);
+    if (gap < -Math.max(2, last.height * 0.3)) return false; // overlapping / out of natural reading order
+    if (!isSameTextRow(last, cand)) return false;
+    const big = Math.max(last.fontSize, cand.fontSize), small = Math.min(last.fontSize, cand.fontSize);
+    if (small <= 0 || big / small > 1.35) return false; // meaningfully different type sizes -> not the same run
+    const refSize = (last.fontSize + cand.fontSize) / 2;
+    // Normal inter-word spacing scales with font size, not a fixed px value
+    // - this is what makes grouping work the same at any PDF size/zoom.
+    // A real table/column gap is comfortably larger than this in every
+    // sample layout this was checked against (including the PAN/Name
+    // table cells in the brief), while ordinary word spacing (including a
+    // stray double-space) stays well under it.
+    const maxWordGap = Math.max(refSize * 0.9, 3);
+    return gap <= maxWordGap;
+  }
+
+  function groupTextItems(rawItems) {
+    // Whitespace-only items (pdf.js sometimes emits a literal " " TextItem
+    // between words, INSTEAD OF encoding the gap purely as position math)
+    // are dropped before grouping ever runs - editor-content.js's own
+    // hit-box loop already treats them as unclickable (`!item.text.trim()`),
+    // and keeping them in the candidate pool actively breaks table
+    // detection: a wide space item can span an entire cell-boundary gap
+    // with a ~0 gap on EITHER side of itself, which made the gap check
+    // below think "PAN" and a same-row value in the next cell were
+    // touching, when the real distance between them was never checked at
+    // all. Confirmed live against a synthetic PAN/HEGPS2973D-style table
+    // row - without this exclusion those two merge into one box; with it,
+    // the real ~200pt gap between them is what the gap check actually
+    // sees, and they correctly stay separate.
+    const meaningful = rawItems.filter((item) => item.text && item.text.trim().length);
+    // Rotated/vertical text is kept exactly as pdf.js reported it, one
+    // item per box - x/y/width here are an axis-aligned bounding box, not
+    // a coordinate frame this row/gap math is valid in once real rotation
+    // is involved (see editor-text-layout.js's own >2° carve-out, which
+    // this mirrors rather than risk mis-grouping geometry it can't
+    // reliably reason about).
+    const flat = meaningful.filter((item) => Math.abs(item.angle || 0) <= 2 && !item.vertical);
+    const rotated = meaningful.filter((item) => !(Math.abs(item.angle || 0) <= 2 && !item.vertical));
+    const sorted = flat.slice().sort((a, b) => a.y - b.y || a.x - b.x);
+    const n = sorted.length;
+    const used = new Array(n).fill(false);
+    const runs = [];
+    for (let i = 0; i < n; i++) {
+      if (used[i]) continue;
+      const run = [sorted[i]];
+      used[i] = true;
+      let last = sorted[i];
+      for (;;) {
+        let bestIdx = -1, bestX = Infinity;
+        for (let j = 0; j < n; j++) {
+          if (used[j]) continue;
+          const cand = sorted[j];
+          if (cand.x < last.x + last.width - Math.max(1, last.height * 0.15)) continue; // must extend past the run's current right edge
+          if (!isSameTextRow(last, cand)) continue;
+          if (cand.x < bestX) { bestX = cand.x; bestIdx = j; }
+        }
+        if (bestIdx === -1) break;
+        const cand = sorted[bestIdx];
+        if (!canMergeAdjacent(last, cand)) break; // real gap/size mismatch: stop the run here, don't skip past it
+        run.push(cand);
+        used[bestIdx] = true;
+        last = cand;
+      }
+      runs.push(run);
+    }
+    const grouped = runs.map((run) => buildGroupedTextItem(run)).concat(rotated.map((item) => Object.assign({}, item)));
+    // Reading order for downstream consumers (find/replace result order,
+    // spatial index construction) - by row then column, same ordering
+    // principle the input was sorted with above.
+    grouped.sort((a, b) => a.y - b.y || a.x - b.x);
+    grouped.forEach((item, index) => { item.index = index; });
+    return grouped;
+  }
+
+  function buildGroupedTextItem(run) {
+    if (run.length === 1) return Object.assign({}, run[0]);
+    const first = run[0];
+    const minX = Math.min(...run.map((r) => r.x));
+    const minY = Math.min(...run.map((r) => r.y));
+    const maxRight = Math.max(...run.map((r) => r.x + r.width));
+    const maxBottom = Math.max(...run.map((r) => r.y + r.height));
+    let text = '';
+    for (let i = 0; i < run.length; i++) {
+      const item = run[i];
+      if (i > 0) {
+        const prev = run[i - 1];
+        const gap = item.x - (prev.x + prev.width);
+        const alreadyHasSpace = /\s$/.test(text) || /^\s/.test(item.text);
+        if (!alreadyHasSpace && gap > Math.max(1, item.fontSize * 0.12)) text += ' ';
+      }
+      text += item.text;
+    }
+    return Object.assign({}, first, {
+      text, x: minX, y: minY, width: maxRight - minX, height: maxBottom - minY
+    });
   }
 
   function unicodeFallback(text) {

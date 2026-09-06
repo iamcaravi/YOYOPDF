@@ -111,7 +111,7 @@ TOOLS.sign = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 
@@ -1068,7 +1068,7 @@ TOOLS.fillform = function(){
   }
   function showWorkspace(){
     hero.style.display="none"; uploadWrap.style.display="none"; privacyHint.style.display="none";
-    workspace.style.display="flex";
+    workspace.style.display="grid";
     body.classList.add("is-loaded");
   }
 

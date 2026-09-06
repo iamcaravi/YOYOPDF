@@ -21,8 +21,12 @@
                                    toolbar already listen for this, unchanged)
    ========================================================================== */
 (function () {
-  const STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 4]; // 25% .. 400%, per the brief
-  const INITIAL_READABLE_SCALE = 1.75;
+  const STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 4]; // 25% .. 400%, per the brief
+  // Default opening zoom is 200% (was 175%) - Edit PDF's text-grouping fix
+  // makes editable runs meaningfully easier to work with at a larger
+  // initial size, and 2 is already one of the STEPS above so it snaps
+  // cleanly with no separate "is this an allowed zoom" rule needed.
+  const INITIAL_READABLE_SCALE = 2;
   let scale = 1;
   let fitMode = null;
   let getContainerSize = () => ({ width: 800, height: 600 });

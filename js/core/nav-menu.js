@@ -1,37 +1,34 @@
 /* ---------------- Tool registry ----------------
    Category set/labels/colors/icons are unchanged - only the ORDER of
-   categories, and the order of tools within "convert"/"edit", moved.
-   PDF to Word, PDF to Excel and Edit PDF were the first 1-2 entries a
-   visitor scanning "All PDF Tools" (this same array flattened, both in
-   the mega-menu columns and in the #toolCategories homepage grid - see
-   below) would hit; they're still fully listed, fully functional, same
-   names/URLs/metadata, just moved to roughly the middle of the overall
-   35-tool list (positions ~15-17 of 35, was ~1-11) via: (a) "convert"
-   and "edit" no longer being the first two categories, and (b) those
-   three tools no longer being the first item(s) within their own
-   category's list. */
+   categories, and the order of tools within each category, changed.
+   Merge PDF, Split PDF, Organize PDF and Rotate PDF are the most
+   commonly used PDF-organization actions, so the "edit" category (the
+   one holding those four, plus every other page-organization/editing
+   tool) now leads, and those four are the first four entries within it
+   - they're still fully listed, fully functional, same names/URLs/
+   metadata/colors/icons, just reordered so a visitor scanning "All PDF
+   Tools" (this same array flattened, both in the mega-menu columns and
+   in the #toolCategories homepage grid - see below) hits them first. */
 const CATEGORIES = [
+  { id:"edit", title:"Edit", tools:[
+    ["merge","Merge PDF"],["split","Split PDF"],["organize","Organize PDF"],["rotate","Rotate PDF"],
+    ["reorder","Reorder Pages"],["deletepages","Delete Pages"],["extractpages","Extract Pages"],["addblank","Add Blank Page"],
+    ["edit","Edit PDF"],["headerfooter","Add Header & Footer"],["pagenumbers","Add Page Numbers"],
+    ["crop","Crop PDF"],["invertpdf","Invert PDF Colors"],["watermark","Add Watermark"],
+  ]},
+  { id:"security", title:"Security", tools:[
+    ["protect","Protect PDF"],["unlock","Unlock PDF"],["sign","Sign PDF"],["flatten","Flatten PDF"],
+    ["fillform","Fill PDF Form"],
+  ]},
   { id:"optimize", title:"Optimize", tools:[
     ["compress","Compress PDF"],["imgcompress","Image Compressor"],["repair","Repair PDF"],
   ]},
-  { id:"security", title:"Security", tools:[
-    ["sign","Sign PDF"],["flatten","Flatten PDF"],["fillform","Fill PDF Form"],
-    ["protect","Protect PDF"],["unlock","Unlock PDF"],
-  ]},
   { id:"convert", title:"Convert", tools:[
-    ["jpg2pdf","JPG to PDF"],["pdf2jpg","PDF to JPG"],["word2pdf","Word to PDF"],
-    ["excel2pdf","Excel to PDF"],["pdf2pptx","PDF to PowerPoint"],["mergeexcel","Merge Excel"],
-    ["pdf2word","PDF to Word"],["pdf2excel","PDF to Excel"],
-  ]},
-  { id:"edit", title:"Edit", tools:[
-    ["edit","Edit PDF"],["merge","Merge PDF"],["split","Split PDF"],
-    ["rotate","Rotate PDF"],["watermark","Add Watermark"],
-    ["organize","Organize PDF"],["pagenumbers","Add Page Numbers"],["crop","Crop PDF"],
-    ["deletepages","Delete Pages"],["extractpages","Extract Pages"],["addblank","Add Blank Page"],
-    ["reorder","Reorder Pages"],["headerfooter","Add Header & Footer"],["invertpdf","Invert PDF Colors"],
+    ["jpg2pdf","JPG to PDF"],["pdf2jpg","PDF to JPG"],["pdf2word","PDF to Word"],["word2pdf","Word to PDF"],
+    ["pdf2excel","PDF to Excel"],["excel2pdf","Excel to PDF"],["pdf2pptx","PDF to PowerPoint"],["mergeexcel","Merge Excel"],
   ]},
   { id:"images", title:"Images", tools:[
-    ["imgresize","Resize Image"],["imgcrop","Crop Image"],["imgconvert","Convert Image Format"],
+    ["imgconvert","Convert Image Format"],["imgresize","Resize Image"],["imgcrop","Crop Image"],
     ["imgwatermark","Add Watermark to Image"],["imginvert","Invert Image Colors"],
   ]},
 ];
@@ -105,42 +102,47 @@ const ICONS = {
 /* Dedicated, tool-specific icons — single source of truth reused everywhere a tool
    icon is rendered (grid cards, "All PDF Tools" mega menu, "Convert PDF" menu,
    mobile accordion, and search results). Never falls back to a generic document
-   icon when a real one is defined here. */
+   icon when a real one is defined here.
+   Sub-elements that css/site.css's "Tool-card icon animations" section
+   animates on card hover/press carry a class (i-a/i-b/i-pg/i-content/etc) -
+   purely a CSS animation hook, no effect on the static icon's appearance or
+   layout. Every icon still communicates its tool with zero animation. */
 const TOOL_ICONS = {
-  merge:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v7l4 4 4-4V3"/><path d="M4 21h16"/><path d="M9 21v-4M15 21v-4"/></svg>`,
-  split:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v6"/><path d="M12 9L6 15v6"/><path d="M12 9l6 6v6"/></svg>`,
-  organize:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/><rect x="3" y="14" width="7" height="7" rx="1.2"/><rect x="14" y="14" width="7" height="7" rx="1.2"/></svg>`,
-  rotate:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 1 3.2 6.9"/><path d="M3 21v-6h6"/></svg>`,
-  crop:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2v14a2 2 0 002 2h14"/><path d="M18 22V8a2 2 0 00-2-2H2"/></svg>`,
-  deletepages:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/><path d="M10 11v6M14 11v6"/></svg>`,
-  extractpages:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M12 17V9"/><path d="M9 12l3-3 3 3"/></svg>`,
-  addblank:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M12 11v6M9 14h6"/></svg>`,
-  reorder:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>`,
-  pagenumbers:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 15h1.5M9 15v4M9 17h1.5M13 15l1 4M14 15l1 4M13 19l1-4"/></svg>`,
-  watermark:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z"/></svg>`,
-  headerfooter:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M3 7h18M3 17h18"/></svg>`,
-  invertpdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 010 18z" fill="currentColor" stroke="none"/></svg>`,
-  compress:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3v4a1 1 0 01-1 1H4M20 8h-4a1 1 0 01-1-1V3M15 21v-4a1 1 0 011-1h4M4 16h4a1 1 0 011 1v4"/></svg>`,
-  flatten:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>`,
-  sign:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17c2-1 3-3 3.5-5C7.5 8 9 6 10.5 8c1 1.4-.5 4-2 5.5 2 1 4-1 5.5-2.7C15.5 9 17.5 8 18 10s-1 3-1 3"/><path d="M14 20l6-6-2-2-6 6z"/></svg>`,
-  fillform:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 8h8M8 12h5"/><path d="M8 16.5l1.5 1.5L13 14"/></svg>`,
-  pdf2word:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M8 13l1.4 6L11 15l1.6 4L14 13"/></svg>`,
-  word2pdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M8 13l1.4 6L11 15l1.6 4L14 13"/></svg>`,
-  pdf2excel:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M8.5 13l6 6M14.5 13l-6 6"/></svg>`,
-  excel2pdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M8.5 13l6 6M14.5 13l-6 6"/></svg>`,
-  mergeexcel:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M8 12h8M8 16h5"/></svg>`,
-  pdf2jpg:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="14" height="11" rx="1.5"/><circle cx="7" cy="9" r="1.1"/><path d="M3 14l4-3.5 3 2.5 3.5-3L17 13"/></svg>`,
-  jpg2pdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="14" height="11" rx="1.5"/><circle cx="7" cy="9" r="1.1"/><path d="M3 14l4-3.5 3 2.5 3.5-3L17 13"/></svg>`,
-  imgresize:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path d="M14 21l7-7M17 21h4v-4"/></svg>`,
-  imgcrop:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2v14a2 2 0 002 2h14"/><path d="M18 22V8a2 2 0 00-2-2H2"/></svg>`,
-  imgconvert:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5-4 4-3-3-5 5"/></svg>`,
-  imgwatermark:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 8.5s3 3 3 5.3a3 3 0 01-6 0c0-2.3 3-5.3 3-5.3z"/></svg>`,
-  imginvert:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4a8 8 0 010 16z" fill="currentColor" stroke="none"/></svg>`,
-  imgcompress:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 10V8h2M15 14v2h-2" stroke-linecap="round"/><path d="M9 8l3 3M15 16l-3-3"/></svg>`,
-  protect:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="10" rx="1.5"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>`,
-  unlock:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="10" rx="1.5"/><path d="M8 11V7a4 4 0 017.6-1.8"/></svg>`,
-  repair:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.6 2.6-2-2 2.6-2.6z"/></svg>`,
-  pdf2pptx:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 17V9h2.5a2 2 0 010 4H9"/></svg>`,
+  merge:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><g class="i-a"><rect x="2" y="5" width="9" height="13" rx="1.4"/><path d="M5 9h3M5 12h3M5 15h2"/></g><g class="i-b"><rect x="13" y="5" width="9" height="13" rx="1.4"/><path d="M16 9h3M16 12h3M16 15h2"/></g></svg>`,
+  split:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><g class="i-a"><path d="M11 3H8a1 1 0 00-1 1v16a1 1 0 001 1h3z"/><path d="M9 8h1M9 12h1M9 16h1"/></g><g class="i-b"><path d="M13 3h3a1 1 0 011 1v16a1 1 0 01-1 1h-3z"/><path d="M14 8h1M14 12h1M14 16h1"/></g></svg>`,
+  organize:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect class="i-tl" x="3" y="3" width="7" height="7" rx="1.2"/><rect class="i-tr" x="14" y="3" width="7" height="7" rx="1.2"/><rect class="i-bl" x="3" y="14" width="7" height="7" rx="1.2"/><rect class="i-br" x="14" y="14" width="7" height="7" rx="1.2"/></svg>`,
+  rotate:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect class="i-pg" x="7" y="6" width="10" height="12" rx="1.4"/><path class="i-arrow" d="M3 12a9 9 0 1 1 3.2 6.9"/><path class="i-arrow" d="M3 21v-6h6"/></svg>`,
+  crop:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path class="i-tl" d="M6 2v14a2 2 0 002 2h14"/><path class="i-br" d="M18 22V8a2 2 0 00-2-2H2"/></svg>`,
+  deletepages:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><g class="i-lid"><path d="M4 7h16"/><path d="M9 7V4h6v3"/></g><g class="i-body"><path d="M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/><path d="M10 11v6M14 11v6"/></g></svg>`,
+  extractpages:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><g class="i-arrow"><path d="M12 17V9"/><path d="M9 12l3-3 3 3"/></g></svg>`,
+  addblank:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/><g class="i-plus"><path d="M12 11v6M9 14h6"/></g></svg>`,
+  reorder:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><g class="i-a"><rect x="4" y="4" width="12" height="6" rx="1.2"/></g><g class="i-b"><rect x="6" y="9" width="12" height="6" rx="1.2"/></g><g class="i-c"><rect x="4" y="14" width="12" height="6" rx="1.2"/></g></svg>`,
+  pagenumbers:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><g class="i-num"><path d="M9 15h1.5M9 15v4M9 17h1.5M13 15l1 4M14 15l1 4M13 19l1-4"/></g></svg>`,
+  watermark:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/><path class="i-drop" d="M12 9.5s3 3.1 3 5.4a3 3 0 01-6 0c0-2.3 3-5.4 3-5.4z" opacity="0.55"/></svg>`,
+  headerfooter:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path class="i-top" d="M3 7h18"/><path class="i-bot" d="M3 17h18"/></svg>`,
+  invertpdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path class="i-half" d="M12 3a9 9 0 010 18z" fill="currentColor" stroke="none"/></svg>`,
+  compress:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path class="i-tl" d="M9 3v4a1 1 0 01-1 1H4"/><path class="i-tr" d="M20 8h-4a1 1 0 01-1-1V3"/><path class="i-br" d="M15 21v-4a1 1 0 011-1h4"/><path class="i-bl" d="M4 16h4a1 1 0 011 1v4"/></svg>`,
+  flatten:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><g class="i-a"><rect x="5" y="3" width="13" height="7" rx="1.3"/></g><g class="i-b"><rect x="5" y="8.5" width="13" height="7" rx="1.3"/></g><g class="i-c"><rect x="5" y="14" width="13" height="7" rx="1.3"/></g></svg>`,
+  sign:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path class="i-sig" d="M3 17c2-1 3-3 3.5-5C7.5 8 9 6 10.5 8c1 1.4-.5 4-2 5.5 2 1 4-1 5.5-2.7C15.5 9 17.5 8 18 10s-1 3-1 3"/><path class="i-pen" d="M14 20l6-6-2-2-6 6z"/></svg>`,
+  fillform:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 8h8M8 12h5"/><path class="i-check" pathLength="1" d="M8 16.5l1.5 1.5L13 14"/></svg>`,
+  edit:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/><path class="i-pencil" d="M8.5 15.2l5-5 1.8 1.8-5 5H8.5v-1.8z"/></svg>`,
+  pdf2word:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path class="i-content" d="M8 13l1.4 6L11 15l1.6 4L14 13"/></svg>`,
+  word2pdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path class="i-content" d="M8 13l1.4 6L11 15l1.6 4L14 13"/></svg>`,
+  pdf2excel:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path class="i-content" d="M8.5 13l6 6M14.5 13l-6 6"/></svg>`,
+  excel2pdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path class="i-content" d="M8.5 13l6 6M14.5 13l-6 6"/></svg>`,
+  mergeexcel:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path class="i-content" d="M8 12h8M8 16h5"/></svg>`,
+  pdf2jpg:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="14" height="11" rx="1.5"/><circle cx="7" cy="9" r="1.1"/><path class="i-content" d="M3 14l4-3.5 3 2.5 3.5-3L17 13"/></svg>`,
+  jpg2pdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="14" height="11" rx="1.5"/><circle cx="7" cy="9" r="1.1"/><path class="i-content" d="M3 14l4-3.5 3 2.5 3.5-3L17 13"/></svg>`,
+  imgresize:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="12" height="12" rx="1.5"/><path class="i-arrow" d="M14 21l7-7M17 21h4v-4"/></svg>`,
+  imgcrop:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path class="i-tl" d="M6 2v14a2 2 0 002 2h14"/><path class="i-br" d="M18 22V8a2 2 0 00-2-2H2"/></svg>`,
+  imgconvert:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path class="i-content" d="M21 16l-5-5-4 4-3-3-5 5"/></svg>`,
+  imgwatermark:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path class="i-drop" d="M12 8.5s3 3 3 5.3a3 3 0 01-6 0c0-2.3 3-5.3 3-5.3z" opacity="0.6"/></svg>`,
+  imginvert:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path class="i-half" d="M12 4a8 8 0 010 16z" fill="currentColor" stroke="none"/></svg>`,
+  imgcompress:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><g class="i-tl"><path d="M9 10V8h2" stroke-linecap="round"/><path d="M9 8l3 3"/></g><g class="i-br"><path d="M15 14v2h-2" stroke-linecap="round"/><path d="M15 16l-3-3"/></g></svg>`,
+  protect:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="10" rx="1.5"/><path class="i-shackle" d="M8 11V7a4 4 0 018 0v4"/></svg>`,
+  unlock:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="11" width="14" height="10" rx="1.5"/><path class="i-shackle" d="M8 11V7a4 4 0 017.6-1.8"/></svg>`,
+  repair:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path class="i-wrench" d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.6 2.6-2-2 2.6-2.6z"/><path class="i-spark" d="M18.5 3l.5 1.4L20.4 5l-1.4.5-.5 1.4-.5-1.4L16.6 5l1.4-.6z" fill="currentColor" stroke="none" opacity="0"/></svg>`,
+  pdf2pptx:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path class="i-content" d="M9 17V9h2.5a2 2 0 010 4H9"/></svg>`,
 };
 function iconFor(id){
   if(TOOL_ICONS[id]) return TOOL_ICONS[id];
@@ -206,20 +208,22 @@ function cardHTML(id, name, color, catId, isPopular){
 const toolCategoriesEl = document.getElementById("toolCategories");
 const POPULAR_SET = new Set(POPULAR_IDS);
 
-/* Homepage "Popular PDF Tools" grid order - by estimated search/usage
-   demand. Deliberately kept separate from CATEGORIES' own tool order
-   (which still drives the mega menu, "Convert PDF" dropdown, mobile
-   accordion and search index - see the other CATEGORIES.forEach call
-   sites above) so re-sequencing this one grid can never reorder those
-   other surfaces. Any tool id from CATEGORIES not listed here simply
-   sorts after all of these, in its original CATEGORIES order (stable
-   sort below) - so every tool still renders exactly once, nothing is
-   dropped, only the ones named here are pinned to a specific spot. */
+/* Homepage tool-card grid order: the most commonly used PDF-organization
+   tools first (Merge, Split, Organize, Rotate), then the rest of the
+   page-organization tools, then Edit, Security, Optimize, Convert and
+   Image tools, in that category order. Explicitly lists every tool id
+   from CATEGORIES so the grid order matches this exact sequence; any
+   tool id from CATEGORIES not listed here (there shouldn't be one)
+   would simply sort after all of these, in its original CATEGORIES
+   order (stable sort below) - so every tool still renders exactly
+   once, nothing is dropped. */
 const HOME_GRID_ORDER = [
-  "pdf2word","jpg2pdf","compress","merge","pdf2jpg","split","word2pdf",
-  "pdf2excel","excel2pdf","pdf2pptx","unlock","protect","rotate","sign",
-  "watermark","extractpages","deletepages","repair","flatten","fillform",
-  "imgcompress","mergeexcel",
+  "merge","split","organize","rotate","reorder","deletepages","extractpages","addblank",
+  "edit","headerfooter","pagenumbers","crop","fillform","invertpdf","watermark",
+  "protect","unlock","sign","flatten",
+  "compress","imgcompress","repair",
+  "jpg2pdf","pdf2jpg","pdf2word","word2pdf","pdf2excel","excel2pdf","pdf2pptx","mergeexcel",
+  "imgconvert","imgresize","imgcrop","imgwatermark","imginvert",
 ];
 const homeOrderIndex = new Map(HOME_GRID_ORDER.map((id,i)=>[id,i]));
 
@@ -640,11 +644,16 @@ document.querySelectorAll("[data-filter]").forEach(el=>{
   });
 });
 
-/* ---------------- Hero CTAs: "All PDF Tools" scrolls + resets filter; "Choose PDF" opens the picker ---------------- */
+/* ---------------- Hero CTAs: "All PDF Tools" scrolls + resets filter ----
+   "Edit PDF" (#heroChoosePdfBtn) no longer has its own click handler here -
+   it now carries data-open="edit" (see index.html), so the existing
+   global [data-open] click delegation (panel.js) opens the Edit PDF tool
+   the exact same way every other data-open button/card on the site
+   already does, instead of this button's previous one-off job of
+   triggering the hero's own file picker (#heroFileInput) - that input is
+   still fully wired to the right-side dropzone/"Choose File" mock UI
+   (see js/core/hero-upload.js), unaffected by this. ---------------- */
 document.getElementById("heroAllToolsBtn")?.addEventListener("click", ()=>{
   applyFilter("all");
   document.getElementById("tools").scrollIntoView({behavior:"smooth", block:"start"});
-});
-document.getElementById("heroChoosePdfBtn")?.addEventListener("click", ()=>{
-  document.getElementById("heroFileInput")?.click();
 });

@@ -544,6 +544,15 @@ html.panel-open{ overflow:hidden; }
    iLovePDF's tight, top-anchored workspace once there's real content,
    rather than a big centered block with growing whitespace around it. */
 .panel-body.has-file{ justify-content:flex-start; padding-top:28px; }
+/* Superseded by .tool-layout/.tool-app-workspace's own min-height:100%
+   (below) - that rule needs .panel-body to keep its base flex:1 (i.e.
+   NOT be overridden to content-sized here) so "100%" has a real, stable
+   parent height to resolve against; fighting it here (flex:0 1 auto)
+   is exactly what was producing a spurious ~72px .panel-body scrollbar
+   (this rule's own padding, double-counted against .tool-layout's
+   fixed-viewport min-height once that was added) confirmed live in the
+   browser, not just in theory. See .tool-layout's own comment for the
+   current, single source of truth on right-panel height. */
 /* Opt-in for tools whose empty state itself has enough content (an intro
    line, a dropzone, trust info) that centering it in the full viewport
    height leaves a large gap above - same top-anchored treatment
@@ -807,40 +816,76 @@ html.panel-open{ overflow:hidden; }
   max-height:none; width:100%; align-self:auto; justify-content:flex-start;
 }
 .tool-workspace.merge-workspace #flist.file-grid:not(:empty){ background:none; border:none; padding:0; }
+/* Card chrome matches the iLovePDF reference at rest: a plain thumbnail
+   + filename, no visible card box/border/badge/buttons - all of that
+   (position badge, remove, reorder arrows, size/page count) still
+   exists and is fully functional, it just fades in on hover/keyboard
+   focus instead of always showing (see the .file-card:hover/
+   :focus-within rules below), the same reveal-on-interaction pattern
+   iLovePDF's own site uses. Nothing here removes any control, only when
+   it's visible by default - every element remains in the normal tab
+   order regardless of visibility, so keyboard users still reach it
+   (:focus-within on the card reveals it before it would receive a
+   click anyway). */
 .merge-workspace .file-card{
-  width:170px; flex-direction:column; align-items:stretch; gap:8px;
-  background:var(--card-bg); border:1px solid var(--line); border-radius:12px; padding:12px;
-  cursor:grab; transition:border-color var(--t-fast,180ms) ease, box-shadow var(--t-fast,180ms) ease, transform var(--t-fast,180ms) ease, opacity var(--t-fast,180ms) ease;
+  position:relative; width:170px; flex-direction:column; align-items:stretch; gap:8px;
+  background:none; border:none; border-radius:0; padding:0;
+  cursor:grab; transition:transform var(--t-fast,180ms) ease, opacity var(--t-fast,180ms) ease;
 }
-.merge-workspace .file-card:hover{ border-color:rgba(var(--brand-shadow-rgb),0.5); box-shadow:var(--glow-shadow); transform:translateY(-2px); }
+.merge-workspace .file-card:hover{ transform:translateY(-2px); }
 .merge-workspace .file-card.dragging{ opacity:.4; cursor:grabbing; }
-.merge-workspace .file-card.drag-over{ border-color:var(--red); box-shadow:0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
+.merge-workspace .file-card.drag-over{ box-shadow:0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); border-radius:8px; }
 .merge-workspace .file-card-thumb{
-  width:100%; height:180px; flex:none; border-radius:8px; box-shadow:none;
-  border:1px solid var(--line); background:#fff;
+  width:100%; height:180px; flex:none; border-radius:8px;
+  border:none; background:#fff; box-shadow:0 6px 16px -8px rgba(0,0,0,0.35);
+  transition:box-shadow var(--t-fast,180ms) ease;
 }
-.merge-workspace .file-card-name{ font-size:.82rem; white-space:normal; -webkit-line-clamp:2; -webkit-box-orient:vertical; display:-webkit-box; overflow:hidden; }
-.merge-workspace .file-card-meta{ font-size:.72rem; }
+.merge-workspace .file-card:hover .file-card-thumb, .merge-workspace .file-card:focus-within .file-card-thumb{
+  box-shadow:0 10px 22px -8px rgba(0,0,0,0.45);
+}
+.merge-workspace .file-card-name{ font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.merge-workspace .file-card-meta{
+  font-size:.72rem; opacity:0; transition:opacity var(--t-fast,180ms) ease;
+}
+.merge-workspace .file-card:hover .file-card-meta, .merge-workspace .file-card:focus-within .file-card-meta{ opacity:1; }
 .merge-workspace .file-card-remove{
-  position:absolute; top:8px; right:8px; opacity:1; margin-left:0;
+  position:absolute; top:8px; right:8px; margin-left:0;
   background:rgba(10,10,12,0.65); color:#fff; border:none; border-radius:50%;
-  width:26px; height:26px; transition:transform var(--t-fast,180ms) ease, background var(--t-fast,180ms) ease;
+  width:26px; height:26px; opacity:0; transition:transform var(--t-fast,180ms) ease, background var(--t-fast,180ms) ease, opacity var(--t-fast,180ms) ease;
 }
-.merge-workspace .file-card{ position:relative; }
-.merge-workspace .file-card:hover .file-card-remove, .merge-workspace .file-card-remove:focus-visible{ transform:scale(1.1); }
+.merge-workspace .file-card:hover .file-card-remove,
+.merge-workspace .file-card:focus-within .file-card-remove,
+.merge-workspace .file-card-remove:focus-visible{ opacity:1; }
+.merge-workspace .file-card:hover .file-card-remove:hover, .merge-workspace .file-card-remove:focus-visible{ transform:scale(1.1); }
 .merge-workspace .file-card-remove:hover{ background:var(--rose); }
 .merge-workspace .file-card-order{
   position:absolute; top:8px; left:8px; width:22px; height:22px; border-radius:50%;
   background:var(--brand-grad); color:var(--btn-ink); font-size:.72rem; font-weight:800;
   display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,.35);
+  opacity:0; transition:opacity var(--t-fast,180ms) ease;
 }
-.merge-workspace .file-card-order-controls{ display:flex; justify-content:center; gap:8px; }
+.merge-workspace .file-card:hover .file-card-order, .merge-workspace .file-card:focus-within .file-card-order{ opacity:1; }
+.merge-workspace .file-card-order-controls{
+  display:flex; justify-content:center; gap:8px;
+  opacity:0; transition:opacity var(--t-fast,180ms) ease;
+}
+.merge-workspace .file-card:hover .file-card-order-controls,
+.merge-workspace .file-card:focus-within .file-card-order-controls{ opacity:1; }
 .merge-workspace .file-card-order-controls button{
   width:34px; height:30px; border:1px solid var(--line); border-radius:8px;
-  background:var(--paper); color:var(--ink); cursor:pointer;
+  background:var(--paper-dim); color:var(--ink); cursor:pointer; font-size:.95rem;
+  transition:border-color var(--t-fast,180ms) ease, color var(--t-fast,180ms) ease, background var(--t-fast,180ms) ease;
 }
 .merge-workspace .file-card-order-controls button:hover,
-.merge-workspace .file-card-order-controls button:focus-visible{ border-color:var(--red); color:var(--red); outline:2px solid var(--red); outline-offset:2px; }
+.merge-workspace .file-card-order-controls button:focus-visible{ border-color:var(--red); color:var(--red); outline:2px solid var(--red); outline-offset:2px; background:var(--paper); }
+/* First/last card's own move-earlier/move-later button - matches
+   wireFileCardDrag()'s own click-handler bounds check (a move past
+   either end already silently no-ops there), just made visible instead
+   of a control that does nothing when pressed. */
+.merge-workspace .file-card-order-controls button:disabled{
+  opacity:.4; cursor:not-allowed; color:var(--ink-soft); background:var(--paper-dim);
+}
+.merge-workspace .file-card-order-controls button:disabled:hover{ border-color:var(--line); color:var(--ink-soft); outline:none; }
 .file-card-sheets{ font-size:.68rem; color:var(--ink-soft); margin-top:2px; white-space:normal; overflow-wrap:anywhere; }
 .mergeexcel-warning{ align-items:flex-start; }
 /* Reusable "workspace action stack" - a small vertical stack of round
@@ -983,10 +1028,14 @@ html.panel-open{ overflow:hidden; }
      filling the available column and centering within it. */
   width:100%; max-width:900px; margin-left:auto; margin-right:auto;
 }
-/* Once the page-grid workspace (and its own sidebar .tool-side-panel-title)
-   is showing, the centered hero above it would just repeat the same tool
-   name a second time - hide it rather than duplicate the title. */
-.tool-workspace.tool-app-shell.is-loaded .tool-hero{ display:none; }
+/* Once the page-grid workspace is showing, the centered EMPTY-STATE hero
+   above it would just repeat the same tool name/description a second
+   time - hide it rather than duplicate. Excludes .tool-sidebar-hero: that
+   class only ever applies to the SAME .tool-hero element after panel.js's
+   layoutTwoColumn() has already moved it inside .tool-side-panel (see
+   that function's own comment) - at that point it IS the panel's one
+   title+description, not a duplicate, and must stay visible. */
+.tool-workspace.tool-app-shell.is-loaded .tool-hero:not(.tool-sidebar-hero){ display:none; }
 /* align-items:stretch (not the flex-start it used to be) so
    .tool-side-panel's box grows to match .tool-main-pane's height instead
    of only ever being as tall as its own handful of fields - that's what
@@ -1000,10 +1049,56 @@ html.panel-open{ overflow:hidden; }
    scrolls internally past that, so stretching to match it can never
    produce the "sidebar/CTA pushed 1000+px down the page" problem a
    genuinely unbounded main pane would. */
-.tool-app-workspace{ display:flex; align-items:stretch; gap:24px; max-width:1400px; margin:0 auto; width:100%; }
-.tool-main-pane{ flex:1; min-width:0; }
+/* True proportional 70/30: a 2-column grid (not flex+fixed-width) so the
+   split is a real 7:3 ratio of whatever width .tool-app-workspace
+   actually has, not a fixed sidebar px value that drifts out of ratio
+   at other viewport widths - same grid-template-columns value the OTHER
+   sidebar system (.tool-layout, below) uses, so both systems land on
+   the identical proportion instead of two different fixed widths
+   (this one was 400px/~29%, .tool-sidebar was 380px/~27%). minmax(0,7fr)
+   lets the left column shrink to 0 rather than overflow; minmax(320px,3fr)
+   keeps the right panel from ever going below a usable width - past that
+   floor the LEFT side alone keeps shrinking (this is what "graceful
+   degradation instead of a literal 70/30 at any cost" looks like) until
+   the 860px breakpoint below stacks both into one column entirely. */
+.tool-app-workspace{
+  display:grid; grid-template-columns:minmax(0,7fr) minmax(320px,3fr);
+  align-items:stretch; gap:24px; max-width:1400px; margin:0 auto; width:100%;
+  /* min-height:100% (not a fixed-vh guess, and not flex:1/min-height:0 -
+     see .tool-layout's identical rule for the full story on why flex:1
+     was reverted: it constrains this box to panel-body's available
+     space even when .tool-main-pane's real content is taller, which let
+     content overflow this box's own edge and broke .tool-side-panel's
+     position:sticky, since sticky's containing block is THIS box). 100%
+     resolves against #panel-body's own content-box height - a real,
+     definite height via its own flex:1 in .panel's column flex, with
+     this workspace as its only rendered child once loaded (siblings are
+     display:none via inline style at that point) - so no padding/header
+     arithmetic needed, unlike a vh-based guess. .tool-side-panel then
+     stretches to match THIS box's real height (align-items:stretch,
+     above), same as before, just without the overflow/sticky bug. */
+  min-height:100%;
+}
+.tool-main-pane{ min-width:0; }
+/* Caps how tall "stretch to match .tool-main-pane" (align-items:stretch,
+   above) is ever allowed to make this panel, and lets it scroll
+   internally past that: without a cap, a very tall .tool-main-pane
+   (many pages/files) stretches this panel just as tall, and
+   margin-top:auto on the CTA (.tool-side-panel .tool-toolbar-primary,
+   below) would push the button to the bottom of that huge box - off-
+   screen, past where position:sticky's own top-pinning can help. Kept
+   as max-height + stretch (not a fixed height + align-self:start, which
+   was tried and reverted): this environment's grid engine wasn't
+   reliably growing the row to match .tool-main-pane's real content once
+   the sidebar stopped participating in stretch, capping .tool-layout's
+   own box short of the content's real height regardless of which
+   sizing property was used - confirmed via extensive live measurement,
+   not just suspected. Keeping both panes on the same stretch-then-cap
+   behavior, as this system already used before, is the version that's
+   held up under scrolling/many-file testing. 106px leaves room for
+   #quickDock (58px footprint + ~48px breathing room above it). */
 .tool-side-panel{
-  width:300px; flex:none; position:sticky; top:20px;
+  position:sticky; top:20px; max-height:calc(100vh - 106px); overflow-y:auto;
   background:var(--paper-dim); border:1px solid var(--line); border-radius:14px;
   padding:20px; display:flex; flex-direction:column; gap:16px;
 }
@@ -1266,7 +1361,15 @@ html.panel-open{ overflow:hidden; }
    little, as a buffer against scrolled content's top edge. */
 .tool-side-panel .tool-toolbar-primary{
   width:100%; margin-top:auto; position:sticky; bottom:0;
-  padding-top:8px; margin-bottom:-8px;
+  padding-top:16px; margin-bottom:-8px;
+  /* color-mix, not raw var(--line) - raw --line (#E2E8F0) against this
+     panel's own --paper-dim background (#EEF4FF) is nearly invisible in
+     practice (confirmed live), too close in tone to read as a real line. */
+  border-top:1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  /* Sits on the button's own already-opaque background (see this rule's
+     own comment above) so the line reads as "content ends here" without
+     needing a separate backing element behind it. */
+  background-clip:padding-box;
 }
 .tool-side-panel .field{ margin:0; }
 /* Segmented mode-switcher tabs (iLovePDF's Range/Pages/Size, Custom/Fixed/Smart pattern) */
@@ -1416,15 +1519,25 @@ html.panel-open{ overflow:hidden; }
   transition:border-color var(--t-fast,180ms) ease, color var(--t-fast,180ms) ease, box-shadow var(--t-fast,180ms) ease;
 }
 .organize-add-btn:hover{ border-color:var(--red); color:var(--red); box-shadow:var(--glow-shadow); }
+/* No separate tablet-range fixed-width override needed any more: the
+   grid's own minmax(320px,3fr) column (above) already narrows the panel
+   proportionally as the viewport shrinks through the tablet range,
+   down to its 320px floor, with no breakpoint required. */
 /* Aligned with .tool-layout's own stacking breakpoint below (860px) -
-   .tool-side-panel is already a fixed 300px (the same width .tool-sidebar
-   only narrows DOWN to for its own tablet range), so there's no reason
-   for this system to give up two-column earlier than the other one: at
-   any width between 861-1024px they used to disagree (one still
-   two-column, the other already stacked) for no structural reason. */
+   .tool-side-panel used to give up two-column at the same point the
+   other system did, so there's no reason for this system to give up
+   two-column earlier than the other one: at any width between
+   861-1024px they used to disagree (one still two-column, the other
+   already stacked) for no structural reason. */
 @media (max-width:860px){
-  .tool-app-workspace{ flex-direction:column; }
-  .tool-side-panel{ width:100%; position:sticky; top:0; z-index:2; }
+  /* The min-height:100% floor (base rule, above) only matters for a real
+     side-by-side 70/30 row, where it's what keeps the right column from
+     collapsing to short content - stacked here, .tool-side-panel is
+     already full-width and the CTA is simply last in normal flow, so
+     forcing this to fill panel-body's full height would just be
+     unwanted empty space below short content instead of anything useful. */
+  .tool-app-workspace{ grid-template-columns:1fr; min-height:0; }
+  .tool-side-panel{ width:100%; position:sticky; top:0; z-index:2; max-height:none; overflow-y:visible; }
 }
 
 /* Image tools' loaded state: the shared quick-preview strip
@@ -1468,7 +1581,13 @@ html.panel-open{ overflow:hidden; }
    it the box collapses to its own content width and sticks to the left
    edge instead). The post-upload two-column row layout overrides this
    back to flex-start just below - see that rule for why. */
-.tool-layout{ display:flex; gap:0; align-items:stretch; width:100%; }
+/* True proportional 70/30, same grid-template-columns value
+   .tool-app-workspace (the other sidebar system) uses - see that rule's
+   own comment for the minmax() reasoning. Previously flex+a fixed 380px
+   .tool-sidebar (~27% of the 1400px cap, drifting further from 30% at
+   any other width); a real 7:3 grid ratio keeps both systems in sync at
+   every viewport width instead of two different fixed pixel values. */
+.tool-layout{ display:grid; grid-template-columns:minmax(0,7fr) minmax(320px,3fr); gap:0; align-items:stretch; width:100%; }
 /* Loaded state: keeps the base stretch above (was overridden to
    flex-start here previously) so .tool-sidebar's box grows to match
    .tool-main's height - same reasoning as .tool-app-workspace's
@@ -1481,7 +1600,34 @@ html.panel-open{ overflow:hidden; }
    source below: .tool-sidebar itself is now height-capped and
    internally scrollable, so it can never grow past a sane, always-
    reachable size no matter how tall .tool-main gets. */
-.tool-workspace.is-loaded .tool-layout{ align-items:stretch; }
+/* min-height:100% (not a fixed-vh guess, and not flex:1/min-height:0) -
+   without SOME floor, .tool-layout (and the .tool-sidebar that
+   stretches to match it) collapses to whatever short content needs
+   (e.g. 1-2 file cards), leaving the CTA sitting right under the info
+   box instead of anchored at a genuine bottom edge like the iLovePDF
+   reference. Scoped to .is-loaded only - the pre-upload single centered
+   column (below) has its own, deliberately compact, sizing.
+   100% (not a vh-based number) resolves against #panel-body's own
+   content-box height - #panel-body{flex:1} in .panel's column flex
+   already gives it a real, definite height, and .tool-layout is
+   confirmed (live) to be its ONLY meaningful child once loaded (the
+   other is an empty #out div) - so 100% here needs no padding/header
+   arithmetic at all, self-adjusting to either automatically.
+   flex:1/min-height:0 (tried first) looked equivalent but was actually
+   a real regression: flex:1 constrains .tool-layout to panel-body's
+   available space even when .tool-main's real content is TALLER, so
+   with enough files .tool-main started overflowing .tool-layout's own
+   box instead of the row growing to contain it - and since
+   .tool-sidebar's position:sticky is scoped to that same (now too
+   short) row as its containing block, sticky ran out of room almost
+   immediately and the CTA visibly jumped within the first ~100-300px
+   of scrolling (confirmed live by measuring at several scroll offsets).
+   min-height (a floor, not a cap) doesn't have this problem: the row
+   still grows past 100% for content that's genuinely taller, exactly
+   like it did before any of today's min-height/flex experiments (that
+   was already correct for the many-files case - only the short-content
+   case needed a floor added). */
+.tool-workspace.is-loaded .tool-layout{ align-items:stretch; min-height:100%; }
 /* Before any file is picked, .tool-layout's two-column split (built once,
    up front, by layoutTwoColumn()) has nothing real to put in the sidebar
    yet - options/CTA stay hidden until upload - so it was rendering as a
@@ -1495,16 +1641,16 @@ html.panel-open{ overflow:hidden; }
    sidebar's title/description above the dropzone despite being second in
    the DOM), so nothing about the post-upload two-column layout changes. */
 .tool-workspace:not(.is-loaded) .tool-layout{
-  flex-direction:column; max-width:1040px; margin:0 auto; gap:0;
+  grid-template-columns:1fr; max-width:1040px; margin:0 auto; gap:0;
 }
 .tool-workspace:not(.is-loaded) .tool-main{
   background:none; padding:0; border-radius:0;
 }
 .tool-workspace:not(.is-loaded) .tool-sidebar{
-  order:-1; width:100%; position:static; padding:0 0 12px;
+  order:-1; width:100%; position:static; padding:0 0 12px; border-left:none;
 }
 .tool-workspace:not(.is-loaded) .tool-sidebar-hero{
-  align-items:center; text-align:center;
+  align-items:center; text-align:center; border-bottom:none; padding-bottom:0;
 }
 .tool-workspace:not(.is-loaded) .tool-sidebar-spacer,
 .tool-workspace:not(.is-loaded) .tool-sidebar-footer{
@@ -1515,71 +1661,91 @@ html.panel-open{ overflow:hidden; }
    what makes empty space read as "inside a defined workspace" instead
    of "blank/broken". Confirmed via their live stylesheet, not a guess. */
 .tool-main{
-  flex:1; min-width:0; display:flex; flex-direction:column; gap:14px;
+  min-width:0; display:flex; flex-direction:column; gap:14px;
   background:var(--paper-dim); border-radius:16px 0 0 16px; padding:28px;
 }
 /* No wrapping card around the whole sidebar — that reads as one big
    mostly-empty box when a tool only has a button and no fields. Each
    piece (title, tip, fields, button) is its own small element on the
    plain page background instead, same as iLovePDF's actual sidebar.
-   Width tuned to ~27% of the 1400px workspace cap (main pane ends up
-   ~71%), matching the 70-75/25-30 work-area/control-panel split every
-   tool should have - the plain .tool-side-panel system (Split/Organize/
-   etc) sits at 300px of its own 1400px cap (~21%); 380px here is
-   intentionally a bit wider since this sidebar's content (multi-line
-   options, no page grid alongside it) needs more breathing room.
-   display:flex column + the spacer/footer split below is what anchors
-   the primary action toward the bottom instead of it floating at an
-   arbitrary height based on how much sidebar content happens to exist. */
+   Width comes from .tool-layout's own grid-template-columns (7:3, same
+   ratio the .tool-side-panel system uses) rather than a fixed px value
+   here, so both sidebar systems land on the identical proportion at
+   every viewport width. display:flex column + the spacer/footer split
+   below is what anchors the primary action toward the bottom instead of
+   it floating at an arbitrary height based on how much sidebar content
+   happens to exist. */
 .tool-sidebar{
-  width:380px; flex:none; display:flex; flex-direction:column; gap:0;
+  display:flex; flex-direction:column; gap:0;
   position:sticky; top:0; padding:28px 0 28px 32px;
-  /* Caps how tall "stretch to match .tool-main" (above) is ever allowed
-     to make this box, and lets it scroll internally past that - the
-     actual fix for the unreachable-CTA case the stretch override used
-     to just avoid outright. In the common case (sidebar's own content
-     is short) this never engages: .tool-sidebar-spacer simply stops
-     growing once it hits the cap, same visual result as before, and the
-     primary action stays pinned at the bottom of a properly viewport-
-     sized panel instead of at an arbitrary mid-page height.
-     106px (not 40px) specifically leaves room for #quickDock, which
-     only ever shows once a tool-workspace is actually loaded - the same
-     moment this cap is most likely to engage (a tall file list/page
-     grid). Dock footprint is bottom:20px + 38px tall icons = 58px from
-     the viewport edge; the extra ~48px above that is breathing room so
-     the sidebar's own clipped bottom edge never sits inside the dock's
-     band, even before its entrance/hover animation is accounted for. */
-  max-height:calc(100vh - 106px); overflow-y:auto;
+  /* Vertical separator between the 70% workspace and this 30% panel -
+     .tool-side-panel (the other sidebar system) already reads as
+     separated via its own all-around card border; this system never had
+     one at all (deliberately, per the "no wrapping card" note below -
+     still true, this is a single edge, not a box). var(--line) alone
+     (#E2E8F0 in light theme) sits almost flush against this panel's own
+     --paper-dim background (#EEF4FF) - both pale, low-contrast, nearly
+     invisible in practice (confirmed live, not just in source) - mixing
+     in a slice of --ink (the main text color, dark in light theme/light
+     in dark theme) instead of using --line raw is what actually makes
+     this read as a real line in both themes rather than a hint of one. */
+  border-left:1px solid color-mix(in srgb, var(--ink) 18%, transparent);
 }
+/* Caps how tall "stretch to match .tool-main" (align-items:stretch on
+   .tool-layout, above) is ever allowed to make this box, and lets it
+   scroll internally past that - the CTA (sticky bottom:0 inside this
+   scrollport, further down) then stays reachable no matter how tall
+   .tool-main's real content (many files) gets, instead of being dragged
+   down with an unbounded stretched sidebar. In the common case (sidebar
+   content is short) this rarely engages: .tool-sidebar-spacer simply
+   fills whatever height stretch gives this box, up to the cap, and the
+   CTA sits at the bottom of that.
+   A fixed height + align-self:start (opting this box out of stretch
+   entirely) was tried and reverted: this environment's grid engine
+   wasn't reliably growing .tool-layout's own row to match .tool-main's
+   real content once this box stopped participating in stretch - the
+   row stayed capped short of the actual content height regardless of
+   which sizing property carried the floor, confirmed via extensive
+   live measurement (not just suspected). Plain stretch + max-height, as
+   this system already used, is the version that's held up correctly
+   under scrolling/many-file testing.
+   Scoped to .is-loaded because .tool-sidebar ALSO exists in the
+   pre-upload empty state (the small centered title box, restyled by
+   the :not(.is-loaded) override below) - an unscoped max-height forced
+   that box to the same near-full-viewport height too, breaking the
+   empty/upload state (confirmed live). The :not(.is-loaded) rule
+   already resets everything else this touches (order/width/position/
+   padding/border-left) and needs nothing new now that max-height/
+   overflow never applies there. 106px leaves room for #quickDock (58px
+   footprint + ~48px breathing room above it). */
+.tool-workspace.is-loaded .tool-sidebar{ max-height:calc(100vh - 106px); overflow-y:auto; }
 /* .tool-hero, reparented into the sidebar as its title+instruction block
    (see layoutTwoColumn()) - restyled left-aligned and compact instead of
    the big centered "hero" look it has above a single-column workspace. */
+/* border-bottom (not on .tool-hero-title alone) so the divider spans
+   the panel's full width under the description too, not just under the
+   title line - matches the reference's "title, divider, description"
+   stack exactly, shared by both sidebar systems since both reparent
+   .tool-hero into this one class (see panel.js's layoutTwoColumn()). */
 .tool-sidebar-hero{
-  text-align:left; align-items:flex-start; padding:0; gap:8px;
+  text-align:left; align-items:flex-start; padding:0 0 14px; gap:8px;
+  /* color-mix, not raw var(--line) - see .tool-sidebar's own border-left
+     comment for why (this class renders on --paper-dim inside
+     .tool-side-panel, where raw --line is nearly invisible). */
+  border-bottom:1px solid color-mix(in srgb, var(--ink) 18%, transparent); margin-bottom:2px;
 }
 .tool-sidebar-hero .tool-hero-title{ font-size:1.5rem; }
-/* iLovePDF's own right-side workspace panel never repeats the tool's
-   description once a file is actually loaded - only the title survives
-   into the loaded sidebar. But the EMPTY-state hero (centered, above the
-   dropzone - see the :not(.is-loaded) centering override above) is a
-   completely different, single-column layout that reuses this same
-   .tool-sidebar-hero wrapper (layoutTwoColumn() reparents .tool-hero
-   into it unconditionally, loaded or not) - a blanket display:none here
-   was hiding the description on THAT screen too, which is a real
-   regression: every tool's landing page must show its description
-   directly under the title, matching iLovePDF's own upload screen.
-   Scoping this to .is-loaded only is the fix - description shows on
-   the empty/landing state, disappears once the workspace/right panel
-   takes over (any tool that still wants an instructional line there
-   uses its own inline hint in the main pane instead, e.g. #mergeHint,
-   styled with the shared .page-grid-hint class). */
-.tool-workspace.is-loaded .tool-sidebar-hero .tool-hero-desc{ display:none; }
-/* Compress PDF's loaded-state sidebar: skip straight to "Compression
-   level" and the options instead of repeating the title a second time
-   above them (empty-state .panel-head is hidden now, so this only fires
-   once loaded - the centered empty-state hero above is unaffected and
-   stays the tool's one visible heading). */
-.compress-workspace.is-loaded .tool-sidebar-hero{ display:none; }
+/* Tool name + description stay visible at the top of the right panel
+   both before AND after a file loads - matches the iLovePDF reference's
+   own hierarchy (title, description, tool content, CTA anchored at the
+   bottom) instead of the description only showing on the empty/landing
+   state. Previously hidden once loaded (both here and per-tool for
+   Compress) to save vertical space; reversed per explicit brief update -
+   every tool's right panel keeps its description throughout, the same
+   .tool-sidebar-hero wrapper layoutTwoColumn() (and, for the bespoke
+   .tool-side-panel tools, panel.js's own layoutTwoColumn() addition)
+   reparents .tool-hero into either way. */
+.tool-workspace .tool-sidebar-hero .tool-hero-desc{ display:block; font-size:.85rem; margin-top:2px; }
 /* Merge/Compress: the dropzone's own "Files stay on this device" hint
    (fileInputHTML(), still visible in the main pane) already gives the
    privacy reassurance once - layoutTwoColumn() unconditionally adds this
@@ -1599,23 +1765,48 @@ html.panel-open{ overflow:hidden; }
 .merge-info-tip .tip-icon{ flex:none; font-size:1rem; line-height:1.4; }
 .tool-sidebar-spacer{ flex:1 1 auto; min-height:20px; }
 .tool-sidebar-footer{ display:flex; flex-direction:column; gap:16px; }
+/* Separator directly above the CTA - targets .tool-toolbar-primary
+   itself (not its optional .tool-toolbar wrapper) so it applies whether
+   a tool wraps its button in the bordered .tool-toolbar box (Merge) or
+   appends a bare #go button straight into the footer (some tools). */
+.tool-sidebar .tool-toolbar-primary{
+  /* color-mix, not raw var(--line) - see .tool-side-panel's identical
+     rule above for why (this button is usually wrapped in .tool-toolbar,
+     itself on --paper-dim, where raw --line is nearly invisible). */
+  border-top:1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  padding-top:16px; margin-top:2px; background-clip:padding-box;
+}
 .tool-sidebar-tip{
   display:flex; align-items:flex-start; gap:10px; background:rgba(30,158,90,0.1);
   border:1px solid rgba(30,158,90,0.35); border-radius:10px; padding:13px 15px;
   font-size:.85rem; line-height:1.45; color:var(--ink);
 }
 .tool-sidebar-tip .tip-icon{ flex:none; font-size:1rem; line-height:1.4; }
-/* Tablet: narrow the sidebar rather than jumping straight from 380px to
-   a full-width stacked column - same width .tool-side-panel (the
-   app-shell tools' sidebar) already uses, so both systems converge to
-   one width in this range. */
+/* Tablet: the grid's own minmax(320px,3fr) column (.tool-layout, above)
+   already narrows the sidebar proportionally through this range with no
+   width override needed - just tightens its left padding a bit sooner
+   than the 860px stack point, same as before. */
 @media (max-width:1200px) and (min-width:861px){
-  .tool-sidebar{ width:300px; padding-left:24px; }
+  .tool-sidebar{ padding-left:24px; }
 }
 @media (max-width: 860px){
-  .tool-layout{ flex-direction:column; gap:20px; }
+  /* Same reasoning as .tool-app-workspace's identical override: the
+     min-height:100% floor only matters for a real side-by-side row. */
+  .tool-layout{ grid-template-columns:1fr; gap:20px; min-height:0; }
   .tool-main{ border-radius:16px; padding:20px; }
-  .tool-sidebar{ width:100%; position:static; padding:0; max-height:none; overflow-y:visible; }
+  /* Stacked (not side-by-side) here - a left edge border would just be a
+     stray vertical line at the top of the panel, not a separator between
+     two columns any more. A top border reads correctly as the same
+     "workspace ends, tool panel begins" divider in a stacked layout. */
+  /* Same specificity as .tool-workspace.is-loaded .tool-sidebar's own
+     max-height:calc(100vh - 106px) (above) is required here - a bare
+     .tool-sidebar selector has lower specificity and would lose to that
+     rule regardless of this media query, since specificity (not media
+     context) decides between two otherwise-matching rules. */
+  .tool-workspace.is-loaded .tool-sidebar{
+    width:100%; position:static; padding:20px 0 0; max-height:none; overflow-y:visible;
+    border-left:none; border-top:1px solid var(--line);
+  }
   .tool-sidebar-spacer{ display:none; }
 }
 .field label{font-size:0.82rem; font-weight:600; display:block; margin-bottom:5px;}
@@ -2611,6 +2802,135 @@ footer{
   color:#fff; font-weight:800; letter-spacing:-0.02em; box-shadow:0 3px 8px -3px rgba(0,0,0,0.5);
 }
 .card .desc{ font-size:0.9rem; color:var(--ink-soft); line-height:1.5; }
+
+/* ===== Tool-card icon animations =====
+   Same TOOL_ICONS svgs (js/core/nav-menu.js) render everywhere a tool icon
+   appears (this grid, the mega menu, mobile accordion, search results) -
+   these rules only ACTIVATE inside .card, so every other reuse site keeps
+   the plain static icon exactly as before. Default state is fully static;
+   :hover (desktop) or :active (touch - fires only while pressed, so it
+   can never become persistent motion) plays one subtle, tool-specific
+   transform on the icon's own moving part (tagged with an i-* class in
+   the svg markup), 250-400ms, GPU-friendly transform/opacity only - no
+   animation library, no JS loop. Every icon must still read correctly
+   with zero animation; these are a bonus cue, never the explanation. */
+.card .icon svg *, .icon-base svg *{ transform-box:fill-box; transform-origin:center; }
+@media (prefers-reduced-motion: no-preference){
+  .card .icon svg, .icon-base svg, .icon-corner{ transition:transform .3s cubic-bezier(.34,1.56,.64,1); }
+  .card .icon svg *, .icon-base svg *{ transition:transform .3s cubic-bezier(.34,1.56,.64,1), opacity .3s ease; }
+  .card:hover .icon svg, .card:active .icon svg,
+  .card:hover .icon-base svg, .card:active .icon-base svg{ transform:scale(1.08); }
+  .card:hover .icon-corner, .card:active .icon-corner{ transform:scale(1.12) rotate(-4deg); }
+
+  /* Merge / Split / Reorder / Flatten - page pieces move together, apart, or collapse */
+  .card[data-tool="merge"]:hover .i-a, .card[data-tool="merge"]:active .i-a{ transform:translateX(2.5px); }
+  .card[data-tool="merge"]:hover .i-b, .card[data-tool="merge"]:active .i-b{ transform:translateX(-2.5px); }
+  .card[data-tool="split"]:hover .i-a, .card[data-tool="split"]:active .i-a{ transform:translateX(-2.5px); }
+  .card[data-tool="split"]:hover .i-b, .card[data-tool="split"]:active .i-b{ transform:translateX(2.5px); }
+  .card[data-tool="reorder"]:hover .i-a, .card[data-tool="reorder"]:active .i-a{ transform:translateY(2.5px); }
+  .card[data-tool="reorder"]:hover .i-c, .card[data-tool="reorder"]:active .i-c{ transform:translateY(-2.5px); }
+  .card[data-tool="flatten"]:hover .i-a, .card[data-tool="flatten"]:active .i-a{ transform:translateY(2.5px); }
+  .card[data-tool="flatten"]:hover .i-c, .card[data-tool="flatten"]:active .i-c{ transform:translateY(-2.5px); }
+
+  /* Organize - opposite thumbnails nudge diagonally, hinting at a reshuffle */
+  .card[data-tool="organize"]:hover .i-tr, .card[data-tool="organize"]:active .i-tr{ transform:translate(-2px,2px); }
+  .card[data-tool="organize"]:hover .i-bl, .card[data-tool="organize"]:active .i-bl{ transform:translate(2px,-2px); }
+
+  /* Rotate - the page itself turns */
+  .card[data-tool="rotate"]:hover .i-pg, .card[data-tool="rotate"]:active .i-pg{ transform:rotate(35deg); }
+
+  /* Crop / Image crop - corner marks tighten inward */
+  .card[data-tool="crop"]:hover .i-tl, .card[data-tool="crop"]:active .i-tl,
+  .card[data-tool="imgcrop"]:hover .i-tl, .card[data-tool="imgcrop"]:active .i-tl{ transform:translate(1.5px,1.5px); }
+  .card[data-tool="crop"]:hover .i-br, .card[data-tool="crop"]:active .i-br,
+  .card[data-tool="imgcrop"]:hover .i-br, .card[data-tool="imgcrop"]:active .i-br{ transform:translate(-1.5px,-1.5px); }
+
+  /* Delete pages - lid pops open */
+  .card[data-tool="deletepages"]:hover .i-lid, .card[data-tool="deletepages"]:active .i-lid{ transform:translateY(-1.5px); }
+
+  /* Extract pages - the page's arrow slides it out of the stack */
+  .card[data-tool="extractpages"]:hover .i-arrow, .card[data-tool="extractpages"]:active .i-arrow{ transform:translateY(-2.5px); }
+
+  /* Add blank page - the plus mark pulses */
+  .card[data-tool="addblank"]:hover .i-plus, .card[data-tool="addblank"]:active .i-plus{ transform:scale(1.3); }
+
+  /* Edit - pencil makes one short writing stroke, then settles */
+  .card[data-tool="edit"]:hover .i-pencil, .card[data-tool="edit"]:active .i-pencil{ animation:ymPencil .4s ease; }
+
+  /* Header & footer - bars slide in from the sides */
+  .card[data-tool="headerfooter"]:hover .i-top, .card[data-tool="headerfooter"]:active .i-top{ transform:translateX(-2px); }
+  .card[data-tool="headerfooter"]:hover .i-bot, .card[data-tool="headerfooter"]:active .i-bot{ transform:translateX(2px); }
+
+  /* Page numbers - the number nudges up, like a page turning */
+  .card[data-tool="pagenumbers"]:hover .i-num, .card[data-tool="pagenumbers"]:active .i-num{ transform:translateY(-1.5px); }
+
+  /* Fill form - the checkmark draws itself in */
+  .card[data-tool="fillform"]:hover .i-check, .card[data-tool="fillform"]:active .i-check{
+    stroke-dasharray:1; animation:ymCheckDraw .35s ease forwards;
+  }
+
+  /* Invert colors - the filled half flips over */
+  .card[data-tool="invertpdf"]:hover .i-half, .card[data-tool="invertpdf"]:active .i-half,
+  .card[data-tool="imginvert"]:hover .i-half, .card[data-tool="imginvert"]:active .i-half{ transform:rotate(180deg); }
+
+  /* Watermark - the stamp/drop settles onto the page */
+  .card[data-tool="watermark"]:hover .i-drop, .card[data-tool="watermark"]:active .i-drop,
+  .card[data-tool="imgwatermark"]:hover .i-drop, .card[data-tool="imgwatermark"]:active .i-drop{
+    transform:scale(1.14); opacity:0.95;
+  }
+
+  /* Compress / Image compressor - corner arrows pull further inward */
+  .card[data-tool="compress"]:hover .icon svg, .card[data-tool="compress"]:active .icon svg{ transform:scale(1.02); }
+  .card[data-tool="compress"]:hover .i-tl, .card[data-tool="compress"]:active .i-tl{ transform:translate(1.5px,1.5px); }
+  .card[data-tool="compress"]:hover .i-tr, .card[data-tool="compress"]:active .i-tr{ transform:translate(-1.5px,1.5px); }
+  .card[data-tool="compress"]:hover .i-br, .card[data-tool="compress"]:active .i-br{ transform:translate(-1.5px,-1.5px); }
+  .card[data-tool="compress"]:hover .i-bl, .card[data-tool="compress"]:active .i-bl{ transform:translate(1.5px,-1.5px); }
+  .card[data-tool="imgcompress"]:hover .i-tl, .card[data-tool="imgcompress"]:active .i-tl{ transform:translate(1px,1px); }
+  .card[data-tool="imgcompress"]:hover .i-br, .card[data-tool="imgcompress"]:active .i-br{ transform:translate(-1px,-1px); }
+
+  /* Repair - the wrench nudges, a quick spark confirms the fix */
+  .card[data-tool="repair"]:hover .i-wrench, .card[data-tool="repair"]:active .i-wrench{ transform:rotate(-14deg); }
+  .card[data-tool="repair"]:hover .i-spark, .card[data-tool="repair"]:active .i-spark{ animation:ymSpark .4s ease; }
+
+  /* Sign - pen makes a short signing stroke */
+  .card[data-tool="sign"]:hover .i-pen, .card[data-tool="sign"]:active .i-pen{ transform:translate(-1.5px,1.5px) rotate(-6deg); }
+
+  /* Protect / Unlock - the shackle closes down or lifts open */
+  .card[data-tool="protect"]:hover .i-shackle, .card[data-tool="protect"]:active .i-shackle{ transform:translateY(1px) scaleY(.94); }
+  .card[data-tool="unlock"]:hover .i-shackle, .card[data-tool="unlock"]:active .i-shackle{ transform:translateY(-1.5px) rotate(-8deg); }
+
+  /* Format-conversion tools - the content preview nudges as the format changes */
+  .card[data-tool="pdf2word"]:hover .i-content, .card[data-tool="pdf2word"]:active .i-content,
+  .card[data-tool="word2pdf"]:hover .i-content, .card[data-tool="word2pdf"]:active .i-content,
+  .card[data-tool="pdf2excel"]:hover .i-content, .card[data-tool="pdf2excel"]:active .i-content,
+  .card[data-tool="excel2pdf"]:hover .i-content, .card[data-tool="excel2pdf"]:active .i-content,
+  .card[data-tool="mergeexcel"]:hover .i-content, .card[data-tool="mergeexcel"]:active .i-content,
+  .card[data-tool="pdf2pptx"]:hover .i-content, .card[data-tool="pdf2pptx"]:active .i-content,
+  .card[data-tool="pdf2jpg"]:hover .i-content, .card[data-tool="pdf2jpg"]:active .i-content,
+  .card[data-tool="jpg2pdf"]:hover .i-content, .card[data-tool="jpg2pdf"]:active .i-content,
+  .card[data-tool="imgconvert"]:hover .i-content, .card[data-tool="imgconvert"]:active .i-content{
+    transform:translateY(-1.5px);
+  }
+
+  /* Image resize - the resize handle extends outward */
+  .card[data-tool="imgresize"]:hover .i-arrow, .card[data-tool="imgresize"]:active .i-arrow{ transform:translate(1.5px,-1.5px); }
+}
+@keyframes ymPencil{
+  0%,100%{ transform:translate(0,0) rotate(0deg); }
+  35%{ transform:translate(-1.5px,1.5px) rotate(-8deg); }
+  70%{ transform:translate(1px,-1px) rotate(4deg); }
+}
+@keyframes ymCheckDraw{ from{ stroke-dashoffset:1; } to{ stroke-dashoffset:0; } }
+@keyframes ymSpark{
+  0%{ opacity:0; transform:scale(.5); }
+  50%{ opacity:1; transform:scale(1.15); }
+  100%{ opacity:0; transform:scale(.9); }
+}
+@media (prefers-reduced-motion: reduce){
+  .card .icon svg, .card .icon svg *, .icon-base svg, .icon-base svg *, .icon-corner{
+    transition:none !important; animation:none !important;
+  }
+}
 
 /* ===== Section shell + eyebrow/heading pattern (shared by new sections) ===== */
 .section-head{ max-width:720px; margin:0 auto 26px; text-align:center; }
