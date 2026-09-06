@@ -214,7 +214,12 @@ function loadEditorAssets(){
   ];
   editorAssetsLoadPromise = files.reduce((p, src) => p.then(() => new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = src + "?v=20";
+    // v=21: editor-canvas.js's initial-render race fix (see loadFile()) -
+    // bumped from v=20 so a browser that already cached these lazy-loaded
+    // editor scripts under the old query string actually fetches the fix
+    // instead of continuing to run the stale, pre-fix file indefinitely.
+    // CSS above is untouched by this fix and stays at v=20.
+    s.src = src + "?v=21";
     s.onload = resolve;
     s.onerror = () => reject(new Error("Failed to load " + src));
     document.head.appendChild(s);
@@ -401,6 +406,25 @@ async function prepareEditFile(file, generation){
     // attaching can make that fit restart an in-flight render on one canvas.
     attachPreparedEditor();
     editorAttached = true;
+    // Root cause of the "wrong initial render, fixed only by clicking
+    // Zoom" production bug: mountDocument() below immediately starts an
+    // IntersectionObserver that renders in-view pages at whatever scale
+    // ZoomManager currently holds (a leftover/default scale) — the real
+    // initial-fit calculation only ran afterward, async, via the
+    // pageChange event mountDocument() itself dispatches (see
+    // editor-layout.js's setupAdaptiveFit, deferred one more tick via
+    // setTimeout(0)). On a slow network that gap is wide enough for the
+    // wrong-scale render to win the race and stick on screen until the
+    // user manually reopens Zoom, which forces one more, uncontested
+    // rerenderAtCurrentScale(). Computing the correct scale here, before
+    // mountDocument() ever mounts a wrapper or fires the observer, makes
+    // the very first render already correct — same getPageInfo()+
+    // initialReadable() calls the pageChange listener a few lines below
+    // already uses for later page navigation, just sequenced earlier for
+    // page 1's initial open.
+    try { window.__currentPageNativeSize = await window.RenderEngine.getPageInfo(1); } catch (_) { /* fall back to ZoomManager's existing default */ }
+    if(generation !== editEntryGeneration) return;
+    window.ZoomManager?.initialReadable();
     await window.ViewportManager.mountDocument(numPages);
     if(generation !== editEntryGeneration) return;
     window.EditorSidebar.init(shell, { pageCount:numPages });

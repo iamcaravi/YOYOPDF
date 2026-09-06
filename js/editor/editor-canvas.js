@@ -54,6 +54,23 @@
     try {
       const { numPages } = await window.RenderEngine.loadDocument(file);
       if (generation !== loadGeneration) return;
+      // Root cause of the "wrong initial render, fixed only by clicking
+      // Zoom" production bug: mountDocument() below immediately starts an
+      // IntersectionObserver that renders in-view pages at whatever scale
+      // ZoomManager currently holds (the previous document's scale, or the
+      // 1x default). editor-layout.js's own auto-fit only runs afterward,
+      // async (on the pageChange event mountDocument() dispatches, deferred
+      // one more tick via setTimeout(0)) — on a slow network that gap is
+      // wide enough for the wrong-scale render to win the race and stick
+      // until the user manually reopens Zoom, which forces one more,
+      // uncontested rerenderAtCurrentScale(). Computing the correct scale
+      // here, before mountDocument() ever mounts a wrapper or fires the
+      // observer, makes the very first render already correct — same
+      // getPageInfo()+initialReadable() calls editor-layout.js's own
+      // pageChange listener already uses, just sequenced earlier.
+      try { window.__currentPageNativeSize = await window.RenderEngine.getPageInfo(1); } catch (_) { /* fall back to ZoomManager's existing default */ }
+      if (generation !== loadGeneration) return;
+      window.ZoomManager?.initialReadable();
       await window.ViewportManager.mountDocument(numPages);
       if (generation !== loadGeneration) return;
       window.EditorSidebar.init(rootEl, { pageCount: numPages });
