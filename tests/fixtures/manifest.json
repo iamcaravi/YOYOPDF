@@ -39,6 +39,10 @@
     "bytes": 465,
     "sha256": "6cdf937428f0b2940a4a57d2e8c6ca7b7040eead1b8708b049d2cd37af130ddb"
   },
+  "transparent.png": {
+    "bytes": 11880,
+    "sha256": "e89681a6ff2676b36d0d3ea7f825b2f45ce2c406804e3b26fce58d6ce4363db1"
+  },
   "valid.pdf": {
     "bytes": 1351,
     "sha256": "b834750ea3eb89190e60690eb43905c433a64cf0b9e5aa9798e79e5bc807cc1c"

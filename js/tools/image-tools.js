@@ -44,6 +44,23 @@ function loadImage(file, {retainObjectUrl=false} = {}){
   });
 }
 
+/* Shared by imgcompress and imgconvert - the two call sites that can
+   encode a canvas to JPEG from an arbitrary source format. A blank 2D
+   canvas defaults to transparent BLACK; JPEG has no alpha channel, so
+   drawing a transparent PNG straight onto it and encoding as JPEG bakes
+   the transparent regions in as black instead of white. Filling white
+   first is a no-op for already-opaque sources (the source fully covers
+   it) and is only applied when the output is actually JPEG, so PNG/WebP
+   outputs keep real alpha untouched. */
+function canvasContextForOutput(canvas, mime){
+  const ctx = canvas.getContext("2d");
+  if(mime === "image/jpeg"){
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  return ctx;
+}
+
 TOOLS.imgcompress = function(){
   const t = window.I18N ? I18N.t : (k)=>k;
   let file=null;
@@ -110,7 +127,7 @@ TOOLS.imgcompress = function(){
       setStatus(t("toolImgCompress.statusCompressing"), false, Math.min(99, Math.round((targetBytes/refSize)*100)));
       const canvas=document.createElement("canvas");
       canvas.width=img.width*scale; canvas.height=img.height*scale;
-      canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+      canvasContextForOutput(canvas, "image/jpeg").drawImage(img,0,0,canvas.width,canvas.height);
       const blob = await new Promise(res=>canvas.toBlob(res,"image/jpeg",quality));
       if(!best || blob.size<best.size) best=blob;
       setStatus(t("toolImgCompress.statusCompressing"), false, Math.min(99, Math.round((targetBytes/blob.size)*100)));
@@ -727,10 +744,10 @@ TOOLS.imgconvert = function(){
   document.getElementById("go").addEventListener("click", withToolOperation(document.getElementById("go"), async (_event, operation)=>{
     const out=document.getElementById("out"); out.innerHTML=statusEl(t("workspace.statusReadingImage"));
     const img = await loadImage(file);
-    const canvas=document.createElement("canvas"); canvas.width=img.width; canvas.height=img.height;
-    canvas.getContext("2d").drawImage(img,0,0);
-    setStatus(t("toolImgConvert.statusConverting"));
     const fmt = document.getElementById("fmt").value;
+    const canvas=document.createElement("canvas"); canvas.width=img.width; canvas.height=img.height;
+    canvasContextForOutput(canvas, fmt).drawImage(img,0,0);
+    setStatus(t("toolImgConvert.statusConverting"));
     const ext = fmt.split("/")[1];
     const blob = await new Promise(res=>canvas.toBlob(res, fmt, 0.92));
     const outName = suffixedName(file, "converted", ext);

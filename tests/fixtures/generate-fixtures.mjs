@@ -77,6 +77,55 @@ function makeSolidPng(width, height, [r, g, b]) {
   ]);
 }
 
+/** A real PNG with an actual alpha channel (color type 6, RGBA): left
+ *  half fully transparent, right half opaque with a smooth per-pixel
+ *  gradient (not a flat fill). Every other PNG fixture here (simple.png,
+ *  sizable.png) is opaque RGB, so none of them can exercise the
+ *  "transparent PNG -> JPEG" flatten-to-white regression path - JPEG has
+ *  no alpha channel, and drawing a transparent source onto a canvas's
+ *  default transparent-black fill before encoding as JPEG previously
+ *  baked transparent regions in as black instead of white. The opaque
+ *  half is a gradient rather than a flat color specifically so deflate
+ *  (PNG) can't compress it anywhere near as well as JPEG's DCT can - a
+ *  flat color PNG this small round-trips smaller than any JPEG
+ *  re-encode of it, which would trip the image-compressor's own "never
+ *  hand back something bigger than the original" safety net and mean
+ *  the compressor never actually produces JPEG bytes to test against. */
+function makeTransparentPng(width, height, [r, g, b]) {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.writeUInt8(8, 8); // bit depth
+  ihdr.writeUInt8(6, 9); // color type: truecolor with alpha (RGBA)
+  const rowBytes = 1 + width * 4; // leading filter-type byte per PNG spec
+  const raw = Buffer.alloc(rowBytes * height);
+  const halfW = Math.floor(width / 2);
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * rowBytes;
+    raw[rowStart] = 0; // filter type: None
+    for (let x = 0; x < width; x++) {
+      const px = rowStart + 1 + x * 4;
+      if (x < halfW) {
+        raw[px] = 0; raw[px + 1] = 0; raw[px + 2] = 0; raw[px + 3] = 0; // fully transparent
+      } else {
+        const gx = x - halfW;
+        raw[px] = r;
+        raw[px + 1] = (g + gx * 3) % 256;
+        raw[px + 2] = (b + y * 5) % 256;
+        raw[px + 3] = 255; // opaque
+      }
+    }
+  }
+  const idat = deflateSync(raw);
+  return Buffer.concat([
+    sig,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", idat),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 function fixedMetadata(pdf, title) {
   pdf.setTitle(title);
   pdf.setAuthor("YOYOPDF test fixture");
@@ -352,6 +401,11 @@ async function buildFixtures() {
     // output - simple.png's 2x2 is too small for that (any crop of it
     // already rounds to <=2px either way).
     "sizable.png": makeSolidPng(200, 150, [0xe8, 0x7a, 0x1a]),
+    // Phase 13: left half transparent / right half an opaque gradient,
+    // 120x80 - big enough that a real JPEG re-encode reliably comes out
+    // smaller than this PNG (see makeTransparentPng's comment), and big
+    // enough to sample distinct pixels from each half after re-encoding.
+    "transparent.png": makeTransparentPng(120, 80, [0xe8, 0x7a, 0x1a]),
     "malformed.pdf": Buffer.from("%PDF-1.7\nThis is deliberately malformed.\n", "utf8"),
     "empty.bin": Buffer.alloc(0),
   };
