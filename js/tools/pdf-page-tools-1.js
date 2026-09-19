@@ -672,6 +672,13 @@ TOOLS.compress = function(){
       <div id="out"></div>
     </div>`);
   let preset = "recommended";
+  // Set for the duration of a single goBtn click (single-file or the
+  // whole batch loop) and cleared once it settles - only consulted by
+  // the main-thread fallback's own cooperative yield points
+  // (pdf-processing-utils.js), so it has zero effect when the Worker
+  // path is actually running (that path's cancellation is unchanged:
+  // cancelCompressWorker()'s Worker.terminate()).
+  let fallbackAbortController = null;
   const customPanel = document.getElementById("customSizePanel");
   const errorBox = document.getElementById("compressError");
   const goBtn = document.getElementById("go");
@@ -732,11 +739,11 @@ TOOLS.compress = function(){
   // mode is exempt: the user explicitly asked for a specific size, so
   // even a small necessary reduction there is the actual point.
   const MIN_MEANINGFUL_SAVINGS_PCT = 4;
-  async function compressOne(bytes, onProgress){
+  async function compressOne(bytes, onProgress, signal){
     let finalBytes, usedOriginal=false, imagesRecompressed=0, targetMissed=false, alreadyUnderTarget=false, negligibleSavings=false;
     if(preset==="custom"){
       const targetBytes = Math.round(parseFloat(document.getElementById("customTargetKB").value) * 1024);
-      const result = await compressToTarget(bytes, targetBytes, onProgress);
+      const result = await compressToTarget(bytes, targetBytes, onProgress, signal);
       imagesRecompressed = result.imagesRecompressed;
       targetMissed = !result.achieved && !result.alreadyUnderTarget;
       alreadyUnderTarget = !!result.alreadyUnderTarget;
@@ -746,7 +753,7 @@ TOOLS.compress = function(){
       // Per-image progress, not just a spinner - large/image-heavy PDFs
       // previously gave zero feedback during this loop, which was
       // indistinguishable from a hung tab.
-      const result = await recompressPdfImages(bytes, preset, onProgress);
+      const result = await recompressPdfImages(bytes, preset, onProgress, signal);
       imagesRecompressed = result.imagesRecompressed;
       if(result.bytes.length >= bytes.byteLength){
         finalBytes = new Uint8Array(bytes); usedOriginal = true;
@@ -778,7 +785,7 @@ TOOLS.compress = function(){
     return {finalBytes, usedOriginal, imagesRecompressed, targetMissed, alreadyUnderTarget, negligibleSavings};
   }
   cancelBtn.addEventListener("click", ()=>{
-    // Compression now runs in a Web Worker (see recompressPdfImages/
+    // Compression normally runs in a Web Worker (see recompressPdfImages/
     // compressToTarget in pdf-processing-utils.js) specifically so a real,
     // immediate cancel is possible - killing the worker mid-doc.save() is
     // the only way to interrupt it, since pdf-lib's serialization has no
@@ -786,12 +793,23 @@ TOOLS.compress = function(){
     // below's try/catch treats the resulting CompressionCancelled error as
     // a normal, non-error outcome.
     cancelCompressWorker();
+    // On browsers where the Worker/OffscreenCanvas path isn't available,
+    // compression runs on the main thread instead - this button used to
+    // be a no-op there (cancelCompressWorker() only ever touches an
+    // actual worker instance, and the fallback never created one), so
+    // Cancel silently did nothing on exactly the path where the operation
+    // can visibly stall. fallbackAbortController is only ever consulted
+    // at the fallback's own cooperative yield points (never mid-synchronous
+    // work, since nothing can interrupt that in JS) - aborting it here is
+    // a no-op if the Worker path is actually the one running.
+    fallbackAbortController?.abort();
   });
   goBtn.addEventListener("click", withToolOperation(goBtn, async (_event, operation)=>{
     const out = document.getElementById("out");
     out.innerHTML = statusEl(t("toolCompress.statusAnalyzing"));
     goBtn.disabled = true;
     cancelBtn.style.display = "";
+    fallbackAbortController = new AbortController();
     try {
       if(files.length===1){
         const file = files[0];
@@ -800,7 +818,7 @@ TOOLS.compress = function(){
         const onProgress = preset==="custom"
           ? (step,total,size)=> setStatus(t("toolCompress.statusCompressingTowardTarget", {step, total, size: fmtSize(size)}), false, Math.round((step/total)*100))
           : (step,total)=> total>1 && setStatus(t("toolCompress.statusCompressingImageN", {step, total}), false, Math.round((step/total)*90));
-        const {finalBytes, usedOriginal, imagesRecompressed, targetMissed, alreadyUnderTarget, negligibleSavings} = await compressOne(bytes, onProgress);
+        const {finalBytes, usedOriginal, imagesRecompressed, targetMissed, alreadyUnderTarget, negligibleSavings} = await compressOne(bytes, onProgress, fallbackAbortController.signal);
         setStatus(t("toolCompress.statusFinalizing"), false, 95);
         const blob = new Blob([finalBytes], {type:"application/pdf"});
         const outName = suffixedName(file, "compressed", "pdf");
@@ -837,7 +855,7 @@ TOOLS.compress = function(){
         for(let i=0;i<files.length;i++){
           setStatus(t("toolCompress.statusCompressingNamed", {name: files[i].name}), false, Math.round((i/files.length)*100));
           const bytes = await files[i].arrayBuffer();
-          const {finalBytes, targetMissed, usedOriginal} = await compressOne(bytes);
+          const {finalBytes, targetMissed, usedOriginal} = await compressOne(bytes, null, fallbackAbortController.signal);
           if(targetMissed) anyMissedTarget = true;
           zip.file(suffixedName(files[i], "compressed", "pdf"), finalBytes);
           totalOriginal += bytes.byteLength;
@@ -883,6 +901,7 @@ TOOLS.compress = function(){
       }
     } finally {
       cancelBtn.style.display = "none";
+      fallbackAbortController = null;
       validate(); // re-syncs goBtn.disabled from current files/preset state
     }
   }));

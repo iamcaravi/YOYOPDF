@@ -126,6 +126,38 @@ function makeTransparentPng(width, height, [r, g, b]) {
   ]);
 }
 
+/** Opaque RGB PNG with a smooth per-pixel gradient (seeded, deterministic)
+ *  rather than a flat fill - see makeImageHeavyPdf()'s comment for why a
+ *  flat fill isn't usable here (it round-trips too small through deflate
+ *  to survive Compress PDF's "no meaningful gain" skip). */
+function makeGradientPng(width, height, seed) {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.writeUInt8(8, 8); // bit depth
+  ihdr.writeUInt8(2, 9); // color type: truecolor (RGB)
+  const rowBytes = 1 + width * 3;
+  const raw = Buffer.alloc(rowBytes * height);
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * rowBytes;
+    raw[rowStart] = 0;
+    for (let x = 0; x < width; x++) {
+      const px = rowStart + 1 + x * 3;
+      raw[px] = (x * 3 + seed * 17) % 256;
+      raw[px + 1] = (y * 5 + seed * 11) % 256;
+      raw[px + 2] = ((x + y) * 2 + seed * 7) % 256;
+    }
+  }
+  const idat = deflateSync(raw);
+  return Buffer.concat([
+    sig,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", idat),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 function fixedMetadata(pdf, title) {
   pdf.setTitle(title);
   pdf.setAuthor("YOYOPDF test fixture");
@@ -166,6 +198,32 @@ async function makeFormPdf() {
   const form = pdf.getForm();
   const field = form.createTextField("TestField");
   field.addToPage(page, { x: 36, y: 500, width: 200, height: 24 });
+  return Buffer.from(await pdf.save({ useObjectStreams: false }));
+}
+
+/** Phase 2 (Compress PDF fallback responsiveness): a small but genuinely
+ *  image-heavy PDF - several pages, each with one embedded raster image
+ *  large/complex enough to exercise recompressPdfImagesMainThread()'s
+ *  real per-image decode+encode work (js/core/pdf-processing-utils.js),
+ *  not just its "no gain, skip" early-out. Each image is a per-pixel
+ *  gradient (not a flat fill) so it survives PNG deflate as a real
+ *  FlateDecode raw-image stream instead of compressing away to nearly
+ *  nothing - a flat-color source PNG round-trips so small here that
+ *  Compress PDF's own "never return a file bigger than the original"
+ *  safety net would keep the original untouched, defeating the point of
+ *  this fixture. Kept modest (4 pages, 320x240) specifically so it stays
+ *  a small, fast, committable fixture rather than a multi-MB one.
+ */
+async function makeImageHeavyPdf() {
+  const pdf = await PDFDocument.create();
+  fixedMetadata(pdf, "YOYOPDF image-heavy fixture");
+  const PAGE_COUNT = 4, IMG_W = 320, IMG_H = 240;
+  for (let i = 0; i < PAGE_COUNT; i++) {
+    const png = makeGradientPng(IMG_W, IMG_H, i + 1);
+    const embedded = await pdf.embedPng(png);
+    const page = pdf.addPage([420, 594]);
+    page.drawImage(embedded, { x: 36, y: 300, width: IMG_W, height: IMG_H });
+  }
   return Buffer.from(await pdf.save({ useObjectStreams: false }));
 }
 
@@ -395,6 +453,7 @@ async function buildFixtures() {
     // fixture has zero form fields, which only exercises its "no fillable
     // fields" empty-state message, never the real fill+export behavior).
     "form.pdf": await makeFormPdf(),
+    "image-heavy.pdf": await makeImageHeavyPdf(),
     "simple.png": PNG_BYTES,
     // Phase 12 (continuation): 200x150 solid orange, real pixel dimensions
     // large enough that a genuine crop-tool drag measurably shrinks the

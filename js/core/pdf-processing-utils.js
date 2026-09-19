@@ -173,7 +173,28 @@ function unfilterPngRows(data, width, height, components, rowBytes){
    transparency. Real-world "PDF is too big" cases are almost always
    driven by embedded photos/scans in one of these two forms, so this
    covers the common case without the risk of a broader rewrite. */
-async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress){
+// How often (in encoded images, not PDF objects) the main-thread fallback
+// yields to the event loop during its per-image encode loop - see the
+// yield's own comment further down for why. Benchmarked on a real
+// image-heavy PDF against every 1/2/4 images before landing on this
+// value (Phase 2 investigation/implementation notes).
+const FALLBACK_YIELD_EVERY_N_IMAGES = 1;
+/** Thrown (name "CompressionCancelled") when a cancellation signal fires
+ *  at one of the fallback's cooperative yield points - the same error
+ *  name cancelCompressWorker() already uses for the Worker path, so the
+ *  existing click-handler catch block in TOOLS.compress (pdf-page-tools-1.js)
+ *  handles both paths identically with no changes needed there. A no-op
+ *  when `signal` is undefined (e.g. any caller that hasn't opted into
+ *  cancellation), so this is safe to call unconditionally. */
+function throwIfCompressionCancelled(signal){
+  if(signal?.aborted){
+    const err = new Error("Compression cancelled");
+    err.name = "CompressionCancelled";
+    throw err;
+  }
+}
+async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress, signal){
+  throwIfCompressionCancelled(signal);
   // Custom mode (below) needs arbitrary {quality, maxDim} pairs that don't
   // correspond to any named preset - accepting an object here directly,
   // alongside the existing named-preset strings every other caller still
@@ -181,9 +202,22 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
   const preset = typeof presetName === "object" && presetName
     ? presetName
     : (COMPRESS_PRESETS[presetName] || COMPRESS_PRESETS.recommended);
-  const doc = await loadPdfSafe(pdfBytes);
+  // Main-thread-only override: loadPdfSafe()'s app-wide default is
+  // ParseSpeeds.Fastest (zero cooperative yields during parse - see its
+  // own comment in js/app.js for why that's the right call everywhere
+  // else). On THIS path specifically, the parse runs on the UI thread
+  // with nothing else to keep it responsive, so it's worth trading some
+  // of that speed for periodic yields instead - Medium (500
+  // objects/tick) rather than Slow (100), since this fixture set showed
+  // Slow costing ~1.7x the parse time for not much extra yield density
+  // on documents in the size range this fallback actually sees. Passed
+  // as extraOpts (loadPdfSafe already supports overriding parseSpeed
+  // per call) - the shared default other tools use is untouched.
+  const doc = await loadPdfSafe(pdfBytes, {parseSpeed: ParseSpeeds.Medium});
+  throwIfCompressionCancelled(signal);
   const { PDFName, PDFRawStream, PDFNumber } = PDFLib;
   let touched = 0;
+  let encodedCount = 0;
   // Materialized once so onImageProgress can report "image N of M" instead
   // of a silent multi-second loop on image-heavy PDFs, which previously
   // looked identical to a hung tab on large files.
@@ -289,6 +323,20 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
       const newDataUrl = canvas.toDataURL("image/jpeg", preset.quality);
       const newBytes = Uint8Array.from(atob(newDataUrl.split(",")[1]), c=>c.charCodeAt(0));
+      // canvas.toDataURL() above is a synchronous, CPU-heavy JPEG encode -
+      // the one part of this loop with no built-in async yield point
+      // (unlike createImageBitmap/inflateFlateBytes above, which are real
+      // awaited decodes). Yielding here every FALLBACK_YIELD_EVERY_N_IMAGES
+      // encoded images (not every object visited - most objects in a PDF
+      // aren't images at all) gives the main thread a chance to repaint
+      // and handle input between encode bursts; benchmarked against every
+      // 1/2/4 images on a real image-heavy PDF before picking this value
+      // (see the Phase 2 investigation/implementation notes).
+      encodedCount++;
+      if(encodedCount % FALLBACK_YIELD_EVERY_N_IMAGES === 0){
+        await new Promise(resolve => setTimeout(resolve, 0));
+        throwIfCompressionCancelled(signal);
+      }
       if(newBytes.length >= obj.contents.length) continue; // no gain - keep original for this image
 
       const newDict = doc.context.obj({});
@@ -307,7 +355,14 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       newDict.delete(PDFName.of("Decode"));
       doc.context.assign(ref, PDFRawStream.of(newDict, newBytes));
       touched++;
-    }catch(e){ /* leave this one object exactly as it was on any failure */ }
+    }catch(e){
+      // Cancellation (thrown by throwIfCompressionCancelled at the yield
+      // point above) must propagate out of the loop, not be swallowed as
+      // "this one image failed to compress" like every other error here -
+      // it isn't a per-image failure, the whole operation is stopping.
+      if(e && e.name === "CompressionCancelled") throw e;
+      /* leave this one object exactly as it was on any other failure */
+    }
   }
   const outBytes = await doc.save();
   return { bytes: outBytes, imagesRecompressed: touched };
@@ -329,7 +384,7 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
  *   still landed above targetBytes - bytes is still the smallest result
  *   found, just not a guarantee of hitting the target.
  */
-async function compressToTargetMainThread(pdfBytes, targetBytes, onProgress){
+async function compressToTargetMainThread(pdfBytes, targetBytes, onProgress, signal){
   const originalSize = pdfBytes.byteLength ?? pdfBytes.length;
   if(originalSize <= targetBytes){
     return { bytes: new Uint8Array(pdfBytes), achieved:true, imagesRecompressed:0, alreadyUnderTarget:true };
@@ -347,7 +402,13 @@ async function compressToTargetMainThread(pdfBytes, targetBytes, onProgress){
   let lo=0, hi=1, best=null, bestUnder=null;
   for(let i=0;i<MAX_ITERATIONS;i++){
     const t = (lo+hi)/2;
-    const result = await recompressPdfImagesMainThread(pdfBytes, presetAt(t));
+    // Cancellation raised inside recompressPdfImagesMainThread's own
+    // yield points propagates straight out of this await and out of this
+    // loop - no separate check needed here for that. This one covers the
+    // gap between iterations too (e.g. cancel arriving right as one
+    // iteration finishes and before the next one's parse starts).
+    throwIfCompressionCancelled(signal);
+    const result = await recompressPdfImagesMainThread(pdfBytes, presetAt(t), null, signal);
     if(onProgress) onProgress(i+1, MAX_ITERATIONS, result.bytes.length);
     if(!best || result.bytes.length < best.bytes.length) best = result;
     if(result.bytes.length <= targetBytes){ bestUnder = result; hi = t; }
@@ -455,30 +516,34 @@ function runCompressJob(type, payload, onProgress){
   });
 }
 
-async function recompressPdfImages(pdfBytes, presetName, onImageProgress){
-  if(!compressWorkerSupported()) return recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress);
+// `signal` (an AbortSignal, optional) only ever reaches the *MainThread
+// fallback calls below - the Worker branch's cancellation is, and
+// remains, exclusively cancelCompressWorker()'s Worker.terminate(); a
+// signal handed to this function has no effect at all on the Worker path.
+async function recompressPdfImages(pdfBytes, presetName, onImageProgress, signal){
+  if(!compressWorkerSupported()) return recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress, signal);
   try{
     const bytesCopy = (pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes)).slice();
     const data = await runCompressJob("recompress", { pdfBytes: bytesCopy, preset: presetName }, onImageProgress);
     return { bytes: data.bytes, imagesRecompressed: data.imagesRecompressed };
   }catch(err){
-    if(err && err.name === "CompressWorkerUnavailable") return recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress);
+    if(err && err.name === "CompressWorkerUnavailable") return recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress, signal);
     throw err;
   }
 }
 
-async function compressToTarget(pdfBytes, targetBytes, onProgress){
+async function compressToTarget(pdfBytes, targetBytes, onProgress, signal){
   const originalSize = pdfBytes.byteLength ?? pdfBytes.length;
   if(originalSize <= targetBytes){
     return { bytes: new Uint8Array(pdfBytes), achieved:true, imagesRecompressed:0, alreadyUnderTarget:true };
   }
-  if(!compressWorkerSupported()) return compressToTargetMainThread(pdfBytes, targetBytes, onProgress);
+  if(!compressWorkerSupported()) return compressToTargetMainThread(pdfBytes, targetBytes, onProgress, signal);
   try{
     const bytesCopy = (pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes)).slice();
     const data = await runCompressJob("compressToTarget", { pdfBytes: bytesCopy, targetBytes }, onProgress);
     return { bytes: data.bytes, achieved: data.achieved, imagesRecompressed: data.imagesRecompressed, alreadyUnderTarget: !!data.alreadyUnderTarget };
   }catch(err){
-    if(err && err.name === "CompressWorkerUnavailable") return compressToTargetMainThread(pdfBytes, targetBytes, onProgress);
+    if(err && err.name === "CompressWorkerUnavailable") return compressToTargetMainThread(pdfBytes, targetBytes, onProgress, signal);
     throw err;
   }
 }
