@@ -10,6 +10,15 @@
 .editor-object{
   position:absolute; box-sizing:border-box; cursor:move;
   outline:1px dashed transparent; user-select:none;
+  /* Scoped to just the object/handles (not .editor-canvas as a whole,
+     which must keep its normal page-scroll/pinch-zoom behavior) - without
+     this, a touch drag meant to move/resize the object is intercepted by
+     the browser as a page-scroll/pinch gesture instead, since a
+     pointerdown/pointermove pair with no touch-action override defaults
+     to "let the browser handle panning/zooming" on a touch input. See
+     js/editor/editor-objects.js's startDrag() for the matching
+     Pointer Events implementation. */
+  touch-action:none;
 }
 .editor-object:hover{ outline-color:rgba(17,43,92,0.35); }
 .editor-object.is-selected{ outline:1.5px solid var(--red,#e8291b); z-index:2; }
@@ -25,12 +34,20 @@
   line-height:1.2; outline:none; pointer-events:auto; cursor:text;
 }
 .editor-object-content .eo-text-inner{ pointer-events:none; }
-.eo-text-inner[contenteditable="true"]{ pointer-events:auto; background:rgba(255,255,255,0.6); }
+.eo-text-inner[contenteditable="true"]{
+  pointer-events:auto; background:rgba(255,255,255,0.6);
+  /* Restores normal touch text-selection/caret gestures while actively
+     editing - the object wrapper's touch-action:none above is only meant
+     to keep drag/resize from being hijacked as a page-scroll gesture, not
+     to block touch text editing once inside it. */
+  touch-action:auto;
+}
 
 .editor-object-handle{
   position:absolute; width:10px; height:10px; border-radius:50%;
   background:#fff; border:1.5px solid var(--red,#e8291b);
   display:none; z-index:3;
+  touch-action:none;
 }
 .editor-object.is-selected .editor-object-handle{ display:block; }
 .editor-object.is-editing .editor-object-handle{ display:none; }

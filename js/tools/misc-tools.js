@@ -179,11 +179,32 @@ function loadEditorAssets(){
   // these editor assets had no cache-busting param at all, so an
   // edit to any of them (like the --font-body fix below) would silently
   // never reach a browser that had already visited once.
-  ["css/editor-workspace.css", "css/pdf-viewer.css", "css/editor-panel.css", "css/editor-inspector.css", "css/editor-viewer-polish.css", "css/editor-objects.css", "css/editor-product.css"].forEach(href=>{
+  //
+  // Each stylesheet's load/error is tracked (unlike before, where these
+  // were pure fire-and-forget) and folded into editorAssetsLoadPromise
+  // below alongside the script chain, so a caller awaiting this function
+  // is guaranteed the real CSS has applied (or definitively failed) by
+  // the time it resolves - not just that the JS has run. Layout reads
+  // like ZoomManager's canvasEl.getBoundingClientRect() depend on
+  // css/editor-workspace.css's flex rules; measuring before this promise
+  // settles could otherwise read the browser's unstyled default box
+  // instead. A failed stylesheet resolves (doesn't reject) its own
+  // promise - one broken/blocked CSS file shouldn't hang the whole
+  // editor open - but is reported via console.warn so it's not silent.
+  const cssLoadPromises = ["css/editor-workspace.css", "css/pdf-viewer.css", "css/editor-panel.css", "css/editor-inspector.css", "css/editor-viewer-polish.css", "css/editor-objects.css", "css/editor-product.css"].map(href=>{
     const l = document.createElement("link");
     l.rel = "stylesheet";
-    l.href = href + "?v=20";
+    // css/editor-objects.css alone was edited (touch-action rules for
+    // pointer-based drag/resize), so only it is bumped to v=21 - a browser
+    // that cached the old copy under v=20 would otherwise never fetch it.
+    const fullHref = href + (href === "css/editor-objects.css" ? "?v=21" : "?v=20");
+    const p = new Promise(resolve=>{
+      l.onload = () => resolve();
+      l.onerror = () => { console.warn("Editor stylesheet failed to load: " + fullHref); resolve(); };
+    });
+    l.href = fullHref;
     document.head.appendChild(l);
+    return p;
   });
 
   const files = [
@@ -212,7 +233,7 @@ function loadEditorAssets(){
     "js/editor/editor-commands.js",
     "js/editor/editor-export.js",
   ];
-  editorAssetsLoadPromise = files.reduce((p, src) => p.then(() => new Promise((resolve, reject) => {
+  const jsLoadPromise = files.reduce((p, src) => p.then(() => new Promise((resolve, reject) => {
     const s = document.createElement("script");
     // v=21: editor-canvas.js's initial-render race fix (see loadFile()) -
     // bumped from v=20 so a browser that already cached these lazy-loaded
@@ -224,6 +245,11 @@ function loadEditorAssets(){
     s.onerror = () => reject(new Error("Failed to load " + src));
     document.head.appendChild(s);
   })), Promise.resolve());
+  // A script failure still rejects (unchanged - editor JS is required, so
+  // this promise still propagates that failure to callers); CSS failures
+  // never reject (see cssLoadPromises above), so this only ever waits
+  // longer for CSS, never fails because of it.
+  editorAssetsLoadPromise = Promise.all([jsLoadPromise, Promise.all(cssLoadPromises)]).then(() => undefined);
   return editorAssetsLoadPromise;
 }
 

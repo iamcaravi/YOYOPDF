@@ -109,6 +109,13 @@
 
   function getScale() { return scale; }
   function getPercent() { return Math.round(scale * 100); }
+  // Exposes the internal fitMode read-only, so a caller can check whether
+  // initialReadable() has already run (fitMode === 'initial') without
+  // duplicating any zoom-selection logic here - added specifically so
+  // editor-layout.js's pendingInitialFit guard (see its own comment) can
+  // verify that invariant instead of assuming it. Doesn't change setScale's
+  // behavior or any existing fitMode semantics.
+  function getFitMode() { return fitMode; }
 
-  window.ZoomManager = { init, setZoom, zoomIn, zoomOut, fitWidth, fitPage, initialReadable, refit, handleWheelDelta, getScale, getPercent, STEPS };
+  window.ZoomManager = { init, setZoom, zoomIn, zoomOut, fitWidth, fitPage, initialReadable, refit, handleWheelDelta, getScale, getPercent, getFitMode, STEPS };
 })();

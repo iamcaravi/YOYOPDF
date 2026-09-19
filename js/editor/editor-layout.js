@@ -78,11 +78,32 @@
   }
 
   function setupAdaptiveFit(root, body, canvas, inspector) {
+    // Both current document-load entry points (js/tools/misc-tools.js's
+    // prepareEditFile() and js/editor/editor-canvas.js's loadFile()) now
+    // deliberately call getPageInfo(1) + ZoomManager.initialReadable()
+    // BEFORE ViewportManager.mountDocument() ever mounts a wrapper or
+    // fires editor:pageChange - see either of those functions' own
+    // comments for why (the original "wrong initial render, fixed only by
+    // clicking Zoom" race). That means by the time this pageChange
+    // listener below ever runs for a document's first page, the correct
+    // fit has already been computed - this listener used to unconditionally
+    // schedule a SECOND initialReadable() call here regardless, which
+    // still went through the full RenderQueue.cancelAll()/PageCache.clear()/
+    // rerender path in ZoomManager.setScale() even when it landed on the
+    // exact same scale, wasting a full page re-render on every single
+    // Edit PDF open. ZoomManager.getFitMode()==='initial' is true exactly
+    // when initialReadable() already ran and nothing has changed the fit
+    // mode since (a plain zoom action clears it) - checking it here instead
+    // of unconditionally re-running is a real verification of that
+    // invariant, not just deleting the call: if some future entry point
+    // ever mounts a document WITHOUT calling initialReadable() first, this
+    // still correctly falls back to running it here, exactly as before.
     let pendingInitialFit = false;
     window.addEventListener('editor:documentLoaded', () => { pendingInitialFit = true; });
     window.addEventListener('editor:pageChange', () => {
       if (!pendingInitialFit) return;
       pendingInitialFit = false;
+      if (window.ZoomManager?.getFitMode() === 'initial') return;
       setTimeout(() => window.ZoomManager?.initialReadable(), 0);
     });
     // Selection never opens the inspector implicitly. The canvas keeps all

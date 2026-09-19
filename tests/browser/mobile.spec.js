@@ -90,3 +90,99 @@ test("mobile dialogs: the Support panel opens over the mobile viewport and its c
   await expect(page.locator("#overlay")).not.toHaveClass(/open/);
   expect(errors).toEqual([]);
 });
+
+// Phase 3 (Edit PDF pointer-based object manipulation, Fix 3): real Pixel 5
+// touch-emulated coverage for js/editor/editor-objects.js's Pointer Events
+// conversion. This device profile has hasTouch:true, but Playwright itself
+// has no public API to synthesize a genuine hardware touch DRAG (only
+// discrete taps via page.touchscreen) - the drag/resize steps below
+// dispatch a real PointerEvent sequence with pointerType:"touch" directly,
+// exercising the same pointerdown/pointermove/pointerup/setPointerCapture
+// code path a real finger would drive. See tests/browser/edit-pdf-pointer.
+// spec.js for the equivalent desktop-mouse coverage of the same code.
+test("mobile Edit PDF: tap selects, touch-pointer drag moves, resize handle works, no scroll hijack", async ({ page }) => {
+  const errors = captureRuntimeErrors(page);
+  // A direct load of /edit-pdf runs TOOLS.edit() automatically, which
+  // opens the #dz/#fi upload dropzone - no navigation click needed.
+  await page.goto("/edit-pdf");
+  await expect(page.locator("#dz")).toBeVisible({ timeout: 10_000 });
+  await page.locator("#fi").setInputFiles(validPdf);
+  await expect(page.locator('.editor-canvas[data-state="page"]')).toBeVisible({ timeout: 20_000 });
+
+  await page.locator('[data-action="text-tool"]').click();
+  const pageWrap = page.locator(".editor-canvas-pages .editor-canvas-page").first();
+  await expect(pageWrap).toBeVisible({ timeout: 10_000 });
+  const pageBox = await pageWrap.boundingBox();
+  // Tap well below the fixture's own title text (drawn near the top of
+  // the page) - landing on top of real PDF text content places a
+  // "replace this source text" object instead of a plain movable one
+  // (see editor-objects.js's own comment on el's pointerdown handler:
+  // such an object only starts dragging after its text edit is
+  // committed), which isn't what this test is exercising.
+  await page.touchscreen.tap(pageBox.x + 60, pageBox.y + pageBox.height * 0.7);
+
+  const objectEl = page.locator(".editor-object").first();
+  await expect(objectEl).toBeVisible({ timeout: 5000 });
+  await expect(objectEl).toHaveClass(/is-selected/); // placement selects it
+
+  const scrollYBefore = await page.evaluate(() => window.scrollY);
+
+  // Move via a synthetic touch-type PointerEvent sequence.
+  const before = await objectEl.evaluate((el) => ({ left: parseFloat(el.style.left), top: parseFloat(el.style.top) }));
+  await page.evaluate(() => {
+    const el = document.querySelector(".editor-object");
+    const rect = el.getBoundingClientRect();
+    const pointerId = 202;
+    const startX = rect.left + rect.width / 2, startY = rect.top + rect.height / 2;
+    function fire(type, x, y) {
+      el.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, composed: true,
+        pointerId, pointerType: "touch", isPrimary: true,
+        clientX: x, clientY: y, button: 0, buttons: type === "pointerup" ? 0 : 1,
+      }));
+    }
+    fire("pointerdown", startX, startY);
+    fire("pointermove", startX + 20, startY + 15);
+    fire("pointermove", startX + 40, startY + 30);
+    fire("pointerup", startX + 40, startY + 30);
+  });
+  const afterMove = await objectEl.evaluate((el) => ({ left: parseFloat(el.style.left), top: parseFloat(el.style.top) }));
+  expect(afterMove.left).toBeGreaterThan(before.left);
+  expect(afterMove.top).toBeGreaterThan(before.top);
+
+  // touch-action:none on .editor-object/.editor-object-handle
+  // (css/editor-objects.css) means this drag must not have scrolled the
+  // page - a real touchmove hijacked into a scroll gesture would move
+  // window.scrollY instead of (or in addition to) the object.
+  const scrollYAfter = await page.evaluate(() => window.scrollY);
+  expect(scrollYAfter).toBe(scrollYBefore);
+
+  // Resize via the se handle, same synthetic touch-pointer technique.
+  const beforeResize = await objectEl.evaluate((el) => ({ width: parseFloat(el.style.width), height: parseFloat(el.style.height) }));
+  await page.evaluate(() => {
+    const handle = document.querySelector(".editor-object.is-selected .editor-object-handle-se");
+    const rect = handle.getBoundingClientRect();
+    const pointerId = 203;
+    const startX = rect.left + rect.width / 2, startY = rect.top + rect.height / 2;
+    function fire(type, x, y) {
+      handle.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, composed: true,
+        pointerId, pointerType: "touch", isPrimary: true,
+        clientX: x, clientY: y, button: 0, buttons: type === "pointerup" ? 0 : 1,
+      }));
+    }
+    fire("pointerdown", startX, startY);
+    fire("pointermove", startX + 25, startY + 20);
+    fire("pointerup", startX + 25, startY + 20);
+  });
+  const afterResize = await objectEl.evaluate((el) => ({ width: parseFloat(el.style.width), height: parseFloat(el.style.height) }));
+  expect(afterResize.width).toBeGreaterThan(beforeResize.width);
+  expect(afterResize.height).toBeGreaterThan(beforeResize.height);
+
+  // /api/rating 404s under the plain dev server (only wired up under
+  // `netlify dev`), logging two console entries per failed request - the
+  // same known environment gap filtered the same way in
+  // tests/browser/image-operations.spec.js. Scoped to this test only.
+  const unexpected = errors.filter((e) => !e.includes("/api/rating") && !e.includes("Failed to load resource"));
+  expect(unexpected).toEqual([]);
+});

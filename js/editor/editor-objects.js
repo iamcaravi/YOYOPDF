@@ -93,7 +93,7 @@
   function onCanvasClick(e) {
     if (suppressNextClick) { suppressNextClick = false; return; }
     // Clicks on an existing object are handled (and stopPropagation'd) by
-    // that object's own mousedown handler below — this only ever sees
+    // that object's own pointerdown handler below — this only ever sees
     // clicks on empty page area or, mid-placement, the page itself.
     const wrap = e.target.closest('.editor-canvas-page');
     if (pendingPlacement) {
@@ -350,14 +350,14 @@
     HANDLES.forEach((h) => {
       const handle = document.createElement('span');
       handle.className = 'editor-object-handle editor-object-handle-' + h;
-      handle.addEventListener('mousedown', (e) => startDrag(e, obj, 'resize', h));
+      handle.addEventListener('pointerdown', (e) => startDrag(e, obj, 'resize', h));
       el.appendChild(handle);
     });
     const content = document.createElement('div');
     content.className = 'editor-object-content';
     el.appendChild(content);
 
-    el.addEventListener('mousedown', (e) => {
+    el.addEventListener('pointerdown', (e) => {
       if (e.target.closest('.editor-object-handle')) return; // handles wire their own
       if (e.target.isContentEditable) return; // mid text-edit — let the click place the caret
       // A newly activated source run enters editing immediately. Once that
@@ -508,6 +508,19 @@
     } catch (_) { return 1; }
   }
 
+  /** Pointer Events (not mouse+touch pairs) — one implementation covers
+   *  mouse, touch, and pen alike, matching the pattern already established
+   *  by js/core/pdf-canvas-widgets.js's wireCropCanvas(). setPointerCapture
+   *  on the element the gesture started on (the handle span for a resize,
+   *  the object wrapper for a move) keeps every subsequent pointermove/up
+   *  targeted at that same element even once the finger/cursor leaves its
+   *  bounds — same reason wireCropCanvas captures on its canvas — so
+   *  listening on that element directly (rather than `window`, the old
+   *  mouse-only implementation's approach) is sufficient and needs no
+   *  separate cross-boundary tracking. touch-action:none on
+   *  .editor-object/.editor-object-handle (css/editor-objects.css) is what
+   *  stops a touch drag here from being hijacked as a page-scroll gesture
+   *  instead of reaching these listeners at all. */
   function startDrag(e, obj, mode, handle) {
     e.preventDefault();
     e.stopPropagation();
@@ -525,7 +538,12 @@
       getPageAspect(obj.page).then((a) => { pageAspect = a; });
     }
 
+    const captureEl = e.currentTarget;
+    const pointerId = e.pointerId;
+    try { captureEl.setPointerCapture(pointerId); } catch (err) {}
+
     function onMove(ev) {
+      if (ev.pointerId !== pointerId) return;
       const dxPct = ((ev.clientX - startX) / rect.width) * 100;
       const dyPct = ((ev.clientY - startY) / rect.height) * 100;
       if (mode === 'move') {
@@ -536,11 +554,14 @@
       }
       renderObjectBox(obj);
     }
-    function onUp() {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      // A plain click (no actual movement — including the mousedown that's
-      // part of every dblclick-to-edit sequence) must not push a no-op
+    function onUp(ev) {
+      if (ev.pointerId !== pointerId) return;
+      captureEl.removeEventListener('pointermove', onMove);
+      captureEl.removeEventListener('pointerup', onUp);
+      captureEl.removeEventListener('pointercancel', onUp);
+      try { captureEl.releasePointerCapture(pointerId); } catch (err) {}
+      // A plain click (no actual movement — including the pointerdown
+      // that's part of every dblclick-to-edit sequence) must not push a no-op
       // undo step: compare against `start` rather than committing
       // unconditionally.
       const moved = obj.xPct !== start.xPct || obj.yPct !== start.yPct || obj.wPct !== start.wPct || obj.hPct !== start.hPct;
@@ -555,8 +576,9 @@
         commit(before);
       }
     }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    captureEl.addEventListener('pointermove', onMove);
+    captureEl.addEventListener('pointerup', onUp);
+    captureEl.addEventListener('pointercancel', onUp);
   }
 
   /** hAspectFactor, when set, is hPct/wPct's required ratio (accounting for
