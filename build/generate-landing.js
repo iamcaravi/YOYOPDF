@@ -53,6 +53,21 @@ function validateRegistry() {
     if (!site[field]) throw new Error("Missing site metadata: " + field);
   }
 
+  // site.lastmod feeds every sitemap <lastmod> (see renderSitemap). It must
+  // be a real YYYY-MM-DD calendar date, checked without consulting the
+  // current date - so this validation can never start failing just because
+  // time has passed. Round-tripping through Date.UTC rejects impossible
+  // dates like 2026-02-30 that a format-only regex would accept.
+  const lastmod = site.lastmod;
+  if (typeof lastmod !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(lastmod)) {
+    throw new Error("Invalid site.lastmod in seo/tools-registry.json: expected a YYYY-MM-DD string, got " + JSON.stringify(lastmod));
+  }
+  const [lmYear, lmMonth, lmDay] = lastmod.split("-").map(Number);
+  const lmDate = new Date(Date.UTC(lmYear, lmMonth - 1, lmDay));
+  if (lmDate.getUTCFullYear() !== lmYear || lmDate.getUTCMonth() !== lmMonth - 1 || lmDate.getUTCDate() !== lmDay) {
+    throw new Error("Invalid site.lastmod in seo/tools-registry.json: " + lastmod + " is not a real calendar date");
+  }
+
   const seen = {
     slug: new Set(),
     file: new Set(),
@@ -417,13 +432,19 @@ function renderRuntimeRouting() {
 function renderSitemap() {
   const urls = [site.domain.replace(/\/$/, "") + "/"]
     .concat(INDEXABLE_TOOLS.map(canonicalFor));
-  // Phase 12: lastmod is the actual date this file was generated (real
-  // `new Date()`, not a fabricated/backdated value) - every URL shares it
-  // rather than claiming a fake per-page edit history the registry has no
-  // real record of. This is honest: it truthfully answers "when was this
-  // sitemap entry last confirmed accurate," which is what a build-time
-  // regenerated static site actually knows, not a lie in either direction.
-  const lastmod = new Date().toISOString().slice(0, 10);
+  // lastmod comes from site.lastmod in seo/tools-registry.json, NOT the
+  // current date. This used to be `new Date()` at generation time, which
+  // made `npm run seo:check` (a byte-for-byte comparison against the
+  // committed sitemap.xml) fail every calendar day after the sitemap was
+  // last regenerated - including on Netlify, where it broke the deploy.
+  // Every URL still shares one value rather than claiming a per-page edit
+  // history the registry has no real record of.
+  // MAINTAINERS: bump site.lastmod to the date of the change whenever SEO
+  // content (registry copy, tool pages, routes) changes, then run
+  // `npm run generate` and commit the regenerated files. Forgetting to
+  // bump leaves an older date but never breaks the build; the value is
+  // validated for format/real-calendar-date in validateRegistry().
+  const lastmod = site.lastmod;
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
