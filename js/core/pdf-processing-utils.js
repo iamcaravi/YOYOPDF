@@ -30,9 +30,17 @@ function winAnsiSafe(s){
    ~1700-2200px on its long edge, so the old 1600 ceiling was already
    downscaling typical scans before quality even entered the picture.
    Readability now wins over squeezing out a few extra percent. */
+/* Compress PDF V2: Recommended splits quality by image class. `quality`
+   is what an ordinary photo gets; `documentQuality` (optional) is what an
+   image the classifier below calls a scanned/typed page gets instead, so
+   text stays crisp while photos - which tolerate it - are squeezed harder.
+   A preset without documentQuality (High, Extreme, every Custom step)
+   uses `quality` for everything, exactly as before. 0.82 -> 0.75 for photos
+   is what makes mid-size q85 photo PDFs actually shrink: at 0.82 the
+   re-encode is usually not smaller than the source and is thrown away. */
 const COMPRESS_PRESETS = {
   high:      { quality: 0.92, maxDim: 3000, protectDocuments: true },
-  recommended: { quality: 0.82, maxDim: 2200, protectDocuments: true },
+  recommended: { quality: 0.75, documentQuality: 0.82, maxDim: 2200, protectDocuments: true },
   max:       { quality: 0.55, maxDim: 1400, protectDocuments: false },
 };
 // A page scanned at ~200 DPI on Letter/A4 is roughly 1700-2200px on its
@@ -56,6 +64,69 @@ function looksLikeDocumentPage(width, height){
   if(shortest < 900) return false; // too small to plausibly be a full-page scan
   const ratio = longest / shortest;
   return ratio > 1.2 && ratio < 1.75;
+}
+/* Compress PDF V2: pixel-based document-page classifier.
+   looksLikeDocumentPage() above can only look at size and aspect ratio, and
+   that cannot tell a 4:3 or 3:2 camera photo from a Letter/A4 page (A4 is
+   1.41, Letter 1.29, 4:3 is 1.33) - every ordinary photo was being
+   "protected" as a scanned page. It stays as the cheap PREFILTER; only
+   images that pass it are then looked at. A scanned/typed page is one
+   dominant, tight "paper" tone (paper colour plus scanner noise) with a
+   little ink on it; a photo spreads across many tones. So the signal is
+   taken from a 128px POINT-SAMPLED thumbnail of the already-decoded bitmap
+   (no smoothing: averaging blends dense text into mid-grey and smears the
+   paper tone - a dense text page measured paperShare 0.32 averaged vs
+   0.77 point-sampled, on the labelled calibration set):
+     paperShare - share of opaque pixels whose luma is inside the busiest
+                  16-level luma window;
+     peakLuma   - centre of that window (a flat DARK image - a night
+                  photo - also has one tight mode, but paper is never dark).
+   Errors are deliberately asymmetric: calling a photo a "document" only
+   costs some compression on that photo, calling a page a "photo" blurs
+   text. The threshold therefore leans towards "document" (see
+   DOC_PAPER_SHARE_MIN's own note). Kept byte-identical in
+   js/workers/pdf-compress-worker.js. */
+const DOC_THUMB_LONG_EDGE = 128;
+const DOC_PAPER_WINDOW = 16;
+// Provisional 0.45 from the design phase; validated (and kept or changed)
+// against the labelled fixture set - see the Phase 5 report.
+const DOC_PAPER_SHARE_MIN = 0.45;
+const DOC_PEAK_LUMA_MIN = 100;
+function documentThumbSize(width, height){
+  const scale = Math.min(1, DOC_THUMB_LONG_EDGE / Math.max(width, height));
+  return {width: Math.max(1, Math.round(width*scale)), height: Math.max(1, Math.round(height*scale))};
+}
+function documentSignalsFromPixels(rgba){
+  const hist = new Uint32Array(256);
+  let n = 0;
+  for(let i=0; i<rgba.length; i+=4){
+    if(rgba[i+3] < 128) continue; // transparent pixels say nothing about the page
+    hist[(0.299*rgba[i] + 0.587*rgba[i+1] + 0.114*rgba[i+2] + 0.5) | 0]++;
+    n++;
+  }
+  if(!n) return {paperShare:0, peakLuma:0};
+  let win = 0;
+  for(let v=0; v<DOC_PAPER_WINDOW; v++) win += hist[v];
+  let best = win, bestLo = 0;
+  for(let lo=1; lo<=256-DOC_PAPER_WINDOW; lo++){
+    win += hist[lo+DOC_PAPER_WINDOW-1] - hist[lo-1];
+    if(win > best){ best = win; bestLo = lo; } // first (darkest) window wins ties - deterministic
+  }
+  return {paperShare: best/n, peakLuma: bestLo + DOC_PAPER_WINDOW/2};
+}
+function isDocumentPageFromSignals(signals){
+  return signals.paperShare >= DOC_PAPER_SHARE_MIN && signals.peakLuma >= DOC_PEAK_LUMA_MIN;
+}
+/* `canvas` is any 2D-capable canvas (an HTMLCanvasElement on the main
+   thread, an OffscreenCanvas in the worker). */
+function documentSignalsFromBitmap(bitmap, canvas){
+  const size = documentThumbSize(bitmap.width, bitmap.height);
+  canvas.width = size.width; canvas.height = size.height;
+  const ctx = canvas.getContext("2d", {willReadFrequently:true});
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, size.width, size.height);
+  ctx.drawImage(bitmap, 0, 0, size.width, size.height);
+  return documentSignalsFromPixels(ctx.getImageData(0, 0, size.width, size.height).data);
 }
 /* Resolves a PDF image ColorSpace entry to a component count (3=RGB,
    1=Gray) when - and only when - that can be determined with confidence;
@@ -193,6 +264,121 @@ function throwIfCompressionCancelled(signal){
     throw err;
   }
 }
+/* PDF /Decode is an array of [min max] pairs, one per colour component; the
+   identity mapping is [0 1] repeated. Anything else (e.g. [1 0] to invert)
+   changes how the stored samples are displayed - and the canvas re-encode
+   below reads the pixels WITHOUT applying /Decode and then drops the key,
+   so such an image would come out visibly inverted/remapped. Skipped. */
+function isIdentityDecode(decode){
+  if(!decode) return true;
+  const arr = decode.asArray ? decode.asArray() : null;
+  if(!arr || !arr.length || arr.length % 2) return false;
+  for(let i=0; i<arr.length; i+=2){
+    if(arr[i]?.asNumber?.() !== 0 || arr[i+1]?.asNumber?.() !== 1) return false;
+  }
+  return true;
+}
+/* What the engine reports about the images it looked at, so the UI can tell
+   "no images at all" from "images we can't safely touch" from "already as
+   small as re-encoding can make them". `found` excludes soft-mask images
+   (they are not pictures the user knows about); `eligible` = passed every
+   guard and was actually decoded; eligible = replaced + noGain +
+   decodeFailed. Mirrored in js/workers/pdf-compress-worker.js. */
+function newCompressStats(){
+  return {
+    found:0, eligible:0, replaced:0, noGain:0, decodeFailed:0, maskImages:0, documentPages:0,
+    skipped:{unsupportedFilter:0, alpha:0, masked:0, decode:0, colorSpace:0, unsupportedParams:0, error:0}
+  };
+}
+function compressStatsSkippedTotal(stats){
+  const sk = (stats && stats.skipped) || {};
+  return Object.keys(sk).reduce((n, k)=>n + (sk[k]||0), 0);
+}
+/* Compress PDF V2: turns "what the engine returned" into exactly one
+   user-facing outcome, so the result screen can say WHY a file did or did
+   not get smaller instead of showing a generic success. Pure (no DOM, no
+   i18n lookup - it returns a message key + variables) so every branch is
+   unit-testable. The 4% floor is passed in by the caller and is NOT applied
+   to Custom (target-size) runs, exactly as before.
+
+   input:
+     originalSize, candidateSize - bytes of the PDF and of the engine output
+     stats     - newCompressStats() shape from the engine (may be missing)
+     floorPct  - minimum % saving worth keeping the re-encoded file for
+     custom    - null, or {alreadyUnderTarget, achieved, targetBytes}
+     verifyFailed - the compressed file failed the reload/page-count check
+   output: {kind, changed, key, vars, tipKey?, tipVars?}
+     changed=false means the ORIGINAL bytes are what the user gets. */
+function describeCompressOutcome(input){
+  const {originalSize, candidateSize, floorPct, custom, verifyFailed} = input;
+  const stats = input.stats || newCompressStats();
+  const savedPct = originalSize > 0 ? (1 - candidateSize/originalSize) * 100 : 0;
+  const unchanged = (kind, key, vars)=>({kind, changed:false, key, vars: vars || {}});
+  if(verifyFailed) return unchanged("verifyFailed", "toolCompress.outVerifyFailed");
+  if(custom && custom.alreadyUnderTarget){
+    return unchanged("alreadyUnderTarget", "toolCompress.doneAlreadyUnderTarget", {size: fmtSize(originalSize)});
+  }
+  const smaller = candidateSize < originalSize;
+  const meaningful = smaller && (!!custom || savedPct >= floorPct);
+  if(!meaningful){
+    // Re-encoded some images and got a real (but sub-floor) saving.
+    if(smaller && stats.replaced > 0){
+      return unchanged("belowFloor", "toolCompress.outBelowFloor", {
+        pct: (Math.round(savedPct*10)/10).toString(), floor: String(floorPct), from: fmtSize(originalSize), to: fmtSize(candidateSize)
+      });
+    }
+    if(stats.found === 0) return unchanged("noImages", "toolCompress.outNoImages");
+    if(stats.eligible === 0) return unchanged("noneEligible", "toolCompress.outNoneEligible", {n: stats.found});
+    return unchanged("noGain", "toolCompress.outNoGain", {n: stats.eligible});
+  }
+  const vars = {from: fmtSize(originalSize), to: fmtSize(candidateSize), pct: Math.round(savedPct)};
+  if(custom && !custom.achieved){
+    return {kind:"targetMissed", changed:true, key:"toolCompress.doneTargetMissed", vars:{size: fmtSize(candidateSize), target: fmtSize(custom.targetBytes)}};
+  }
+  const skipped = compressStatsSkippedTotal(stats);
+  if(stats.replaced > 0){
+    const out = {kind:"reduced", changed:true, key:"toolCompress.outReduced", vars};
+    if(skipped > 0){ out.tipKey = "toolCompress.outSkippedTip"; out.tipVars = {n: skipped, total: stats.found}; }
+    return out;
+  }
+  return {kind:"structure", changed:true, key:"toolCompress.outStructure", vars};
+}
+/* Camera JPEGs can carry an EXIF Orientation tag. PDF viewers ignore EXIF,
+   but createImageBitmap()/<img> apply it, so decoding such an image and
+   re-encoding the pixels would rotate it relative to the /Width /Height and
+   placement the PDF declares (verified: a 3000x2000 EXIF-6 JPEG came back
+   1467x2200). imageOrientation:"none" does NOT prevent this - in current
+   browsers "none" is a legacy alias of the default "from-image". The only
+   reliable, cross-browser fix is to hand the decoder bytes without the EXIF
+   APP1 segment, so the raw stored pixel grid is what gets decoded. Only the
+   Exif APP1 segment is removed (never touched: ICC, XMP, quantisation or
+   entropy data - the image itself is re-encoded anyway). Returns the SAME
+   array when there is nothing to strip or the bytes are not a JPEG. Mirrored
+   in js/workers/pdf-compress-worker.js. */
+function jpegWithoutExif(bytes){
+  if(!bytes || bytes.length < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return bytes;
+  const chunks = [bytes.subarray(0, 2)];
+  let start = 2, i = 2, removed = false;
+  while(i + 4 <= bytes.length){
+    if(bytes[i] !== 0xFF) break;
+    const marker = bytes[i+1];
+    if(marker === 0xD9 || marker === 0xDA) break; // EOI / SOS: entropy-coded data follows
+    if(marker === 0xFF){ i++; continue; }         // fill byte
+    if(marker === 0x01 || (marker >= 0xD0 && marker <= 0xD8)){ i += 2; continue; } // standalone markers
+    const len = (bytes[i+2] << 8) | bytes[i+3];
+    if(len < 2 || i + 2 + len > bytes.length) break;
+    const isExif = marker === 0xE1 && bytes[i+4] === 0x45 && bytes[i+5] === 0x78 && bytes[i+6] === 0x69 &&
+      bytes[i+7] === 0x66 && bytes[i+8] === 0 && bytes[i+9] === 0; // "Exif\0\0"
+    if(isExif){ chunks.push(bytes.subarray(start, i)); start = i + 2 + len; removed = true; }
+    i += 2 + len;
+  }
+  if(!removed) return bytes;
+  chunks.push(bytes.subarray(start));
+  const out = new Uint8Array(chunks.reduce((n, c)=>n + c.length, 0));
+  let o = 0;
+  for(const c of chunks){ out.set(c, o); o += c.length; }
+  return out;
+}
 async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress, signal){
   throwIfCompressionCancelled(signal);
   // Custom mode (below) needs arbitrary {quality, maxDim} pairs that don't
@@ -215,17 +401,31 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
   // per call) - the shared default other tools use is untouched.
   const doc = await loadPdfSafe(pdfBytes, {parseSpeed: ParseSpeeds.Medium});
   throwIfCompressionCancelled(signal);
-  const { PDFName, PDFRawStream, PDFNumber } = PDFLib;
+  const { PDFName, PDFRawStream, PDFNumber, PDFRef } = PDFLib;
   let touched = 0;
   let encodedCount = 0;
+  const stats = newCompressStats();
+  let thumbCanvas = null; // reused by the document classifier
+  // Soft-mask / explicit-mask images are alpha data belonging to another
+  // image, not pictures in their own right: never recompress them (a lossy
+  // re-encode of a mask corrupts the transparency) and don't count them as
+  // images the user has.
+  const allObjects = Array.from(doc.context.enumerateIndirectObjects());
+  const maskRefs = new Set();
+  for(const [,obj] of allObjects){
+    if(!(obj instanceof PDFRawStream)) continue;
+    for(const key of ["SMask", "Mask"]){
+      const target = obj.dict.get(PDFName.of(key));
+      if(target instanceof PDFRef) maskRefs.add(target.toString());
+    }
+  }
   // Materialized once so onImageProgress can report "image N of M" instead
   // of a silent multi-second loop on image-heavy PDFs, which previously
   // looked identical to a hung tab on large files.
-  const allObjects = Array.from(doc.context.enumerateIndirectObjects());
-  const imageObjects = allObjects.filter(([,obj])=>{
+  const imageObjects = allObjects.filter(([ref, obj])=>{
     if(!(obj instanceof PDFRawStream)) return false;
     const subtype = obj.dict.lookup(PDFName.of("Subtype"));
-    return subtype && subtype.asString?.() === "/Image";
+    return !!subtype && subtype.asString?.() === "/Image" && !maskRefs.has(ref.toString());
   });
   let imageIndex = 0;
   for(const [ref, obj] of allObjects){
@@ -234,7 +434,9 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       const dict = obj.dict;
       const subtype = dict.lookup(PDFName.of("Subtype"));
       if(!subtype || subtype.asString?.() !== "/Image") continue;
+      if(maskRefs.has(ref.toString())){ stats.maskImages++; continue; }
       imageIndex++;
+      stats.found++;
       if(onImageProgress) onImageProgress(imageIndex, imageObjects.length);
       const filter = dict.lookup(PDFName.of("Filter"));
       const filterName = filter && filter.asString ? filter.asString() : (Array.isArray(filter?.array) ? filter.array.map(f=>f.asString?.()).join(",") : "");
@@ -243,15 +445,21 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       // "/ASCII85Decode,/FlateDecode" needs a decode step this function
       // doesn't implement, so it's left untouched rather than guessed at.
       const isRawFlate = filterName === "/FlateDecode";
-      if(!isJpeg && !isRawFlate) continue; // neither format this function knows how to re-encode
-      if(dict.lookup(PDFName.of("SMask"))) continue; // has transparency - skip, JPEG can't keep it
+      if(!isJpeg && !isRawFlate){ stats.skipped.unsupportedFilter++; continue; } // neither format this function knows how to re-encode
+      if(dict.lookup(PDFName.of("SMask"))){ stats.skipped.alpha++; continue; } // has transparency - skip, JPEG can't keep it
+      // A colour-key /Mask marks specific sample values transparent; a lossy
+      // re-encode no longer produces those exact values, so the transparency
+      // would silently break.
+      if(dict.lookup(PDFName.of("Mask"))){ stats.skipped.masked++; continue; }
+      if(!isIdentityDecode(dict.lookup(PDFName.of("Decode")))){ stats.skipped.decode++; continue; }
 
       let bitmap = null;
       if(isJpeg){
         const colorSpace = dict.lookup(PDFName.of("ColorSpace"));
         const csName = colorSpace && colorSpace.asString ? colorSpace.asString() : "";
-        if(csName && !/DeviceRGB|DeviceGray|CalRGB|CalGray/.test(csName)) continue; // skip CMYK/Indexed etc.
-        const blob = new Blob([obj.contents], {type:"image/jpeg"});
+        if(csName && !/DeviceRGB|DeviceGray|CalRGB|CalGray/.test(csName)){ stats.skipped.colorSpace++; continue; } // skip CMYK/Indexed etc.
+        stats.eligible++;
+        const blob = new Blob([jpegWithoutExif(obj.contents)], {type:"image/jpeg"});
         // createImageBitmap() has been observed elsewhere in this app to
         // hang indefinitely (never resolving or rejecting) rather than
         // erroring on some inputs - without a timeout here, one bad image
@@ -259,6 +467,8 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
         // since this runs in a sequential loop. Same "skip on failure"
         // philosophy as CMYK/SMask above - a timed-out image is left
         // untouched.
+        // The EXIF segment was stripped above (see jpegWithoutExif) so the
+        // browser cannot auto-rotate the pixels.
         bitmap = await Promise.race([
           createImageBitmap(blob),
           new Promise((_, reject) => setTimeout(() => reject(new Error("decode timed out")), 8000))
@@ -274,23 +484,25 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
         const height = dict.lookup(PDFName.of("Height"))?.asNumber?.();
         const bpc = dict.lookup(PDFName.of("BitsPerComponent"))?.asNumber?.();
         const components = resolveImageComponents(dict.lookup(PDFName.of("ColorSpace")), doc.context, PDFName);
+        if(!components){ stats.skipped.colorSpace++; continue; }
         // 8 bits/component only - 1/2/4-bit raw images (rare, and usually
         // already tiny after Flate) and 16-bit are out of scope here.
         // Width*height capped well under typical browser/canvas limits so
         // a pathological Width/Height pair can't force an enormous
         // in-memory pixel buffer before any of the real image bytes have
         // even been inflated.
-        if(!width || !height || bpc!==8 || !components || width*height>30_000_000) continue;
+        if(!width || !height || bpc!==8 || width*height>30_000_000){ stats.skipped.unsupportedParams++; continue; }
         const predictor = dict.lookup(PDFName.of("DecodeParms"))?.lookup?.(PDFName.of("Predictor"))?.asNumber?.() ?? 1;
-        if(predictor!==1 && (predictor<10 || predictor>15)) continue; // TIFF predictor / unknown - not implemented, skip
+        if(predictor!==1 && (predictor<10 || predictor>15)){ stats.skipped.unsupportedParams++; continue; } // TIFF predictor / unknown - not implemented, skip
+        stats.eligible++;
         const inflated = await Promise.race([
           inflateFlateBytes(obj.contents),
           new Promise((_, reject) => setTimeout(() => reject(new Error("inflate timed out")), 8000))
         ]).catch(()=>null);
-        if(!inflated) continue;
+        if(!inflated){ stats.decodeFailed++; continue; }
         const rowBytes = width*components;
         const raw = predictor===1 ? inflated : unfilterPngRows(inflated, width, height, components, rowBytes);
-        if(!raw || raw.length < rowBytes*height) continue; // truncated/corrupt - leave untouched
+        if(!raw || raw.length < rowBytes*height){ stats.decodeFailed++; continue; } // truncated/corrupt - leave untouched
         const rgba = new Uint8ClampedArray(width*height*4);
         if(components===3){
           for(let p=0, s=0; p<width*height; p++, s+=3){
@@ -303,17 +515,26 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
         }
         bitmap = await createImageBitmap(new ImageData(rgba, width, height)).catch(()=>null);
       }
-      if(!bitmap) continue; // not decodable (or timed out) - skip rather than guess
+      if(!bitmap){ stats.decodeFailed++; continue; } // not decodable (or timed out) - skip rather than guess
 
       let {width, height} = bitmap;
       const longest = Math.max(width, height);
-      // Scanned-page-shaped images get a higher effective ceiling on
-      // gentler presets, so a real document page never gets downscaled
-      // below normal reading resolution just because "Recommended" was
-      // selected - see DOC_PAGE_MIN_LONG_EDGE above.
-      const effectiveMaxDim = (preset.protectDocuments && looksLikeDocumentPage(width, height))
+      // Scanned-page-shaped images get a higher effective ceiling (and, on
+      // Recommended, a higher quality) so a real document page never gets
+      // downscaled below normal reading resolution or over-compressed just
+      // because "Recommended" was selected - see DOC_PAGE_MIN_LONG_EDGE and
+      // the pixel classifier above. Only images that pass the cheap
+      // size/aspect prefilter are ever looked at.
+      let isDocument = false;
+      if(preset.protectDocuments && looksLikeDocumentPage(width, height)){
+        if(!thumbCanvas) thumbCanvas = document.createElement("canvas");
+        isDocument = isDocumentPageFromSignals(documentSignalsFromBitmap(bitmap, thumbCanvas));
+      }
+      if(isDocument) stats.documentPages++;
+      const effectiveMaxDim = isDocument
         ? Math.max(preset.maxDim, DOC_PAGE_MIN_LONG_EDGE)
         : preset.maxDim;
+      const quality = (isDocument && preset.documentQuality) ? preset.documentQuality : preset.quality;
       if(longest > effectiveMaxDim){
         const scale = effectiveMaxDim / longest;
         width = Math.round(width*scale); height = Math.round(height*scale);
@@ -321,7 +542,7 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       const canvas = document.createElement("canvas");
       canvas.width = width; canvas.height = height;
       canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
-      const newDataUrl = canvas.toDataURL("image/jpeg", preset.quality);
+      const newDataUrl = canvas.toDataURL("image/jpeg", quality);
       const newBytes = Uint8Array.from(atob(newDataUrl.split(",")[1]), c=>c.charCodeAt(0));
       // canvas.toDataURL() above is a synchronous, CPU-heavy JPEG encode -
       // the one part of this loop with no built-in async yield point
@@ -337,7 +558,7 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
         await new Promise(resolve => setTimeout(resolve, 0));
         throwIfCompressionCancelled(signal);
       }
-      if(newBytes.length >= obj.contents.length) continue; // no gain - keep original for this image
+      if(newBytes.length >= obj.contents.length){ stats.noGain++; continue; } // no gain - keep original for this image
 
       const newDict = doc.context.obj({});
       dict.keys().forEach(k=>newDict.set(k, dict.get(k))); // start from a copy of the original dict
@@ -350,11 +571,13 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       // The source dict's DecodeParms (PNG predictor settings) and Decode
       // (component remap, e.g. an inverted-grayscale mask) no longer apply
       // once the stream is real DCTDecode/DeviceRGB JPEG data - carrying
-      // either over would misinterpret the new bytes.
+      // either over would misinterpret the new bytes. (Decode can only be
+      // identity here - non-identity images were skipped above.)
       newDict.delete(PDFName.of("DecodeParms"));
       newDict.delete(PDFName.of("Decode"));
       doc.context.assign(ref, PDFRawStream.of(newDict, newBytes));
       touched++;
+      stats.replaced = touched;
     }catch(e){
       // Cancellation (thrown by throwIfCompressionCancelled at the yield
       // point above) must propagate out of the loop, not be swallowed as
@@ -362,10 +585,11 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       // it isn't a per-image failure, the whole operation is stopping.
       if(e && e.name === "CompressionCancelled") throw e;
       /* leave this one object exactly as it was on any other failure */
+      stats.skipped.error++;
     }
   }
   const outBytes = await doc.save();
-  return { bytes: outBytes, imagesRecompressed: touched };
+  return { bytes: outBytes, imagesRecompressed: touched, stats };
 }
 /**
  * Custom "target size" compression: binary-searches a single aggressiveness
@@ -387,7 +611,7 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
 async function compressToTargetMainThread(pdfBytes, targetBytes, onProgress, signal){
   const originalSize = pdfBytes.byteLength ?? pdfBytes.length;
   if(originalSize <= targetBytes){
-    return { bytes: new Uint8Array(pdfBytes), achieved:true, imagesRecompressed:0, alreadyUnderTarget:true };
+    return { bytes: new Uint8Array(pdfBytes), achieved:true, imagesRecompressed:0, alreadyUnderTarget:true, stats:newCompressStats() };
   }
   const MAX_ITERATIONS = 6;
   // t=0 -> same ceiling as the "high" (least-aggressive) preset
@@ -415,7 +639,7 @@ async function compressToTargetMainThread(pdfBytes, targetBytes, onProgress, sig
     else { lo = t; }
   }
   const chosen = bestUnder || best;
-  return { bytes: chosen.bytes, achieved: chosen.bytes.length <= targetBytes, imagesRecompressed: chosen.imagesRecompressed };
+  return { bytes: chosen.bytes, achieved: chosen.bytes.length <= targetBytes, imagesRecompressed: chosen.imagesRecompressed, stats: chosen.stats };
 }
 
 /* ---------------- Worker-backed compression (Phase 4) ----------------
@@ -525,7 +749,7 @@ async function recompressPdfImages(pdfBytes, presetName, onImageProgress, signal
   try{
     const bytesCopy = (pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes)).slice();
     const data = await runCompressJob("recompress", { pdfBytes: bytesCopy, preset: presetName }, onImageProgress);
-    return { bytes: data.bytes, imagesRecompressed: data.imagesRecompressed };
+    return { bytes: data.bytes, imagesRecompressed: data.imagesRecompressed, stats: data.stats };
   }catch(err){
     if(err && err.name === "CompressWorkerUnavailable") return recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgress, signal);
     throw err;
@@ -535,13 +759,13 @@ async function recompressPdfImages(pdfBytes, presetName, onImageProgress, signal
 async function compressToTarget(pdfBytes, targetBytes, onProgress, signal){
   const originalSize = pdfBytes.byteLength ?? pdfBytes.length;
   if(originalSize <= targetBytes){
-    return { bytes: new Uint8Array(pdfBytes), achieved:true, imagesRecompressed:0, alreadyUnderTarget:true };
+    return { bytes: new Uint8Array(pdfBytes), achieved:true, imagesRecompressed:0, alreadyUnderTarget:true, stats:newCompressStats() };
   }
   if(!compressWorkerSupported()) return compressToTargetMainThread(pdfBytes, targetBytes, onProgress, signal);
   try{
     const bytesCopy = (pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes)).slice();
     const data = await runCompressJob("compressToTarget", { pdfBytes: bytesCopy, targetBytes }, onProgress);
-    return { bytes: data.bytes, achieved: data.achieved, imagesRecompressed: data.imagesRecompressed, alreadyUnderTarget: !!data.alreadyUnderTarget };
+    return { bytes: data.bytes, achieved: data.achieved, imagesRecompressed: data.imagesRecompressed, alreadyUnderTarget: !!data.alreadyUnderTarget, stats: data.stats };
   }catch(err){
     if(err && err.name === "CompressWorkerUnavailable") return compressToTargetMainThread(pdfBytes, targetBytes, onProgress, signal);
     throw err;

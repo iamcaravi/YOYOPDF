@@ -740,49 +740,84 @@ TOOLS.compress = function(){
   // even a small necessary reduction there is the actual point.
   const MIN_MEANINGFUL_SAVINGS_PCT = 4;
   async function compressOne(bytes, onProgress, signal){
-    let finalBytes, usedOriginal=false, imagesRecompressed=0, targetMissed=false, alreadyUnderTarget=false, negligibleSavings=false;
+    // The engine (worker or main-thread fallback) returns the candidate
+    // bytes plus `stats` describing what it saw; describeCompressOutcome()
+    // (pdf-processing-utils.js) turns that into ONE outcome - which of the
+    // "reduced / structure-only / no images / none eligible / no gain /
+    // below the floor / verification failed / custom-target" cases this is -
+    // so the result screen can say why, instead of a generic success.
+    let candidate, stats, custom = null, imagesRecompressed = 0;
     if(preset==="custom"){
       const targetBytes = Math.round(parseFloat(document.getElementById("customTargetKB").value) * 1024);
       const result = await compressToTarget(bytes, targetBytes, onProgress, signal);
       imagesRecompressed = result.imagesRecompressed;
-      targetMissed = !result.achieved && !result.alreadyUnderTarget;
-      alreadyUnderTarget = !!result.alreadyUnderTarget;
-      if(result.bytes.length >= bytes.byteLength){ finalBytes = new Uint8Array(bytes); usedOriginal = true; }
-      else finalBytes = result.bytes;
+      candidate = result.bytes;
+      stats = result.stats;
+      custom = {alreadyUnderTarget: !!result.alreadyUnderTarget, achieved: !!result.achieved, targetBytes};
     } else {
       // Per-image progress, not just a spinner - large/image-heavy PDFs
       // previously gave zero feedback during this loop, which was
       // indistinguishable from a hung tab.
       const result = await recompressPdfImages(bytes, preset, onProgress, signal);
       imagesRecompressed = result.imagesRecompressed;
-      if(result.bytes.length >= bytes.byteLength){
-        finalBytes = new Uint8Array(bytes); usedOriginal = true;
-      } else {
-        const savedPct = (1 - result.bytes.length/bytes.byteLength) * 100;
-        if(savedPct < MIN_MEANINGFUL_SAVINGS_PCT){
-          finalBytes = new Uint8Array(bytes); usedOriginal = true; negligibleSavings = true;
-        } else {
-          finalBytes = result.bytes;
-        }
-      }
+      candidate = result.bytes;
+      stats = result.stats;
     }
+    const outcomeInput = {originalSize: bytes.byteLength, candidateSize: candidate.length, stats, floorPct: MIN_MEANINGFUL_SAVINGS_PCT, custom};
+    let outcome = describeCompressOutcome(outcomeInput);
+    let finalBytes = outcome.changed ? candidate : new Uint8Array(bytes);
     // Validate before ever calling this a success: reload both the
     // original and the compressed output and require the same page
     // count. A compressed PDF that fails to reload, or silently lost a
     // page, must never be handed to the user as "Done" - fall back to
-    // the pristine original instead (the existing "kept the original
-    // file" messaging below already covers this path).
-    if(!usedOriginal){
+    // the pristine original instead, and say so.
+    if(outcome.changed){
+      let verified = true;
       try{
         const [origDoc, newDoc] = await Promise.all([loadPdfSafe(bytes), loadPdfSafe(finalBytes)]);
-        if(newDoc.getPageCount() !== origDoc.getPageCount()){
-          finalBytes = new Uint8Array(bytes); usedOriginal = true;
-        }
+        if(newDoc.getPageCount() !== origDoc.getPageCount()) verified = false;
       }catch(e){
-        finalBytes = new Uint8Array(bytes); usedOriginal = true;
+        verified = false;
+      }
+      if(!verified){
+        outcome = describeCompressOutcome({...outcomeInput, verifyFailed:true});
+        finalBytes = new Uint8Array(bytes);
       }
     }
-    return {finalBytes, usedOriginal, imagesRecompressed, targetMissed, alreadyUnderTarget, negligibleSavings};
+    return {
+      finalBytes, outcome, stats, imagesRecompressed,
+      usedOriginal: !outcome.changed,
+      targetMissed: !!custom && !custom.achieved && !custom.alreadyUnderTarget,
+      alreadyUnderTarget: !!custom && custom.alreadyUnderTarget,
+      negligibleSavings: outcome.kind === "belowFloor"
+    };
+  }
+  /** Plain-language message for an outcome, including the optional
+   *  "N images were left unchanged" tip. */
+  function outcomeMessage(outcome){
+    let msg = t(outcome.key, outcome.vars);
+    if(outcome.tipKey) msg += t(outcome.tipKey, outcome.tipVars);
+    return msg;
+  }
+  /** Puts the outcome explanation inside the result box, directly under the
+   *  "Result size" line. When the original was kept, the heading and size
+   *  badge stop claiming a success (no generic "All done" + red badge). */
+  function decorateResultBox(box, outcome){
+    const note = document.createElement("div");
+    note.className = "mode-info compress-note";
+    note.setAttribute("role", "status");
+    note.dataset.outcome = outcome.kind;
+    note.style.margin = "12px 0";
+    note.style.textAlign = "left";
+    note.textContent = outcomeMessage(outcome);
+    const anchor = box.querySelector(".thumbs") || box.querySelector(".dl-link");
+    if(anchor) box.insertBefore(note, anchor); else box.appendChild(note);
+    if(!outcome.changed){
+      const heading = box.querySelector(".result-head h3");
+      if(heading) heading.textContent = "ℹ️ " + t("toolCompress.resultHeadingUnchanged");
+      const badge = box.querySelector(".size-badge");
+      if(badge) badge.classList.remove("bad");
+    }
   }
   cancelBtn.addEventListener("click", ()=>{
     // Compression normally runs in a Web Worker (see recompressPdfImages/
@@ -818,29 +853,21 @@ TOOLS.compress = function(){
         const onProgress = preset==="custom"
           ? (step,total,size)=> setStatus(t("toolCompress.statusCompressingTowardTarget", {step, total, size: fmtSize(size)}), false, Math.round((step/total)*100))
           : (step,total)=> total>1 && setStatus(t("toolCompress.statusCompressingImageN", {step, total}), false, Math.round((step/total)*90));
-        const {finalBytes, usedOriginal, imagesRecompressed, targetMissed, alreadyUnderTarget, negligibleSavings} = await compressOne(bytes, onProgress, fallbackAbortController.signal);
+        const {finalBytes, usedOriginal, outcome} = await compressOne(bytes, onProgress, fallbackAbortController.signal);
         setStatus(t("toolCompress.statusFinalizing"), false, 95);
         const blob = new Blob([finalBytes], {type:"application/pdf"});
         const outName = suffixedName(file, "compressed", "pdf");
         if(!operation.isCurrent()) return;
         const {url} = downloadBlob(blob, outName);
         const {canvas} = await pdfThumb(finalBytes);
-        const savedPct = Math.round((1 - blob.size/bytes.byteLength) * 100);
-        if(alreadyUnderTarget){
-          setStatus(t("toolCompress.doneAlreadyUnderTarget", {size: fmtSize(bytes.byteLength)}), true);
-        } else if(negligibleSavings){
-          setStatus(t("toolCompress.doneNegligibleSavings"), true);
-        } else if(usedOriginal){
-          setStatus(imagesRecompressed===0
-            ? t("toolCompress.doneNoImagesFound")
-            : t("toolCompress.doneNoReduction"), true);
-        } else if(targetMissed){
-          setStatus(t("toolCompress.doneTargetMissed", {size: fmtSize(blob.size), target: fmtSize(Math.round(parseFloat(document.getElementById("customTargetKB").value)*1024))}), true);
-        } else {
-          setStatus(t("toolCompress.doneSuccess", {from: fmtSize(bytes.byteLength), to: fmtSize(blob.size), pct: savedPct}), true);
-        }
+        // The loader is removed here; the explanation itself is rendered
+        // INSIDE the result box below (setStatus(..., true) discards its
+        // message text - that is why it was never visible before).
+        setStatus(outcomeMessage(outcome), true);
         if(!operation.isCurrent()) return;
-        out.appendChild(resultBox({sizeText:`${fmtSize(blob.size)}${usedOriginal?"":` (was ${fmtSize(bytes.byteLength)})`}`, sizeGood:!usedOriginal, previewNode:canvas, url, filename:outName, nextTool:{id:"edit", label:t("tools.edit"), question:t("toolCompress.nextToolQuestion")}}));
+        const box = resultBox({sizeText:`${fmtSize(blob.size)}${usedOriginal?"":` (was ${fmtSize(bytes.byteLength)})`}`, sizeGood:!usedOriginal, previewNode:canvas, url, filename:outName, nextTool:{id:"edit", label:t("tools.edit"), question:t("toolCompress.nextToolQuestion")}});
+        decorateResultBox(box, outcome);
+        out.appendChild(box);
       } else {
         await ensureJSZip();
         const zip = new JSZip();
