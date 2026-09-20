@@ -33,6 +33,11 @@
   --panel-bg:#FFFFFF;
   --ink:#111827;
   --ink-soft:#64748B;
+  /* Navigation dropdown (mega menu + Convert PDF menu) resting tool text / icon colours. --ink-soft is the
+     site-wide secondary-text token and was too faint here (4.76:1 on the white card, thin-stroke icons);
+     these two are scoped to the dropdown only. Hover/focus keep using --red. */
+  --nav-link-ink:#334155;
+  --nav-link-icon:#475569;
   /* LIGHT THEME REBRAND (exact #0000FF): --red/--brand-grad/
      --brand-shadow-rgb/--btn-ink/--ochre/--glow-shadow were the site's
      electric-blue (#1677FF) identity here - same technique used for
@@ -140,6 +145,8 @@
   --panel-bg:#101010;
   --ink:#F2F2F0;
   --ink-soft:#9A9A96;
+  --nav-link-ink:#C4C4C0;
+  --nav-link-icon:#B4B4B0;
   --line: rgba(255,255,255,0.10);
   --header-bg:#050505;
   --card-bg:#101010;
@@ -2480,10 +2487,10 @@ footer{
 .nav-dd-menu button{
   display:flex; align-items:center; gap:9px; width:100%; text-align:left;
   background:none; border:none; font-family:inherit; font-size:0.86rem; font-weight:500;
-  color:var(--ink-soft); padding:9px 10px; border-radius:8px; cursor:pointer; transition:.12s;
+  color:var(--nav-link-ink); padding:9px 10px; border-radius:8px; cursor:pointer; transition:.12s;
 }
 .nav-dd-menu button:hover, .nav-dd-menu button:focus-visible{ background:var(--paper-dim); color:var(--red); outline:none; }
-.nav-dd-menu .mega-tool-icon{ color:var(--ink-soft); }
+.nav-dd-menu .mega-tool-icon{ color:var(--nav-link-icon); }
 .nav-dd-menu button:hover .mega-tool-icon, .nav-dd-menu button:focus-visible .mega-tool-icon{ color:var(--red); }
 
 /* ===== Mega Menu (All PDF Tools) ===== */
@@ -2522,13 +2529,14 @@ footer{
 .mega-col-list button{
   display:flex; align-items:center; gap:8px; width:100%; text-align:left;
   background:none; border:none; font-family:inherit; font-size:0.83rem; font-weight:500;
-  color:var(--ink-soft); padding:5px 6px; border-radius:7px; cursor:pointer; transition:.12s;
+  color:var(--nav-link-ink); padding:5px 6px; border-radius:7px; cursor:pointer; transition:.12s;
 }
 .mega-col-list button:hover{ background:var(--paper-dim); color:var(--red); }
-.mega-tool-icon{ width:16px; height:16px; flex:none; color:var(--ink-soft); }
+.mega-tool-icon{ width:16px; height:16px; flex:none; color:var(--nav-link-icon); }
 .mega-tool-icon svg{ width:16px; height:16px; }
 .mega-col-list button:hover .mega-tool-icon{ color:var(--red); }
-.mega-col-list button[disabled]{ cursor:default; opacity:0.6; }
+.mega-col-list button[disabled]{ cursor:default; opacity:0.6; color:var(--ink-soft); }
+.mega-col-list button[disabled] .mega-tool-icon{ color:var(--ink-soft); }
 .mega-col-list button[disabled]:hover{ background:none; color:var(--ink-soft); }
 @media(max-width:1300px){ .mega-grid{ grid-template-columns:repeat(auto-fit, minmax(130px,1fr)); } }
 
