@@ -144,6 +144,14 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous"></script>
 <!-- RUNTIME_LIBRARIES_END -->
+<!-- ADSENSE_LOADER_START -->
+<!-- Google AdSense loader, generated from build/adsense-config.js for the homepage and every tool page
+     (never privacy-policy.html or 404.html). No ad units/containers exist yet. Google-managed script, so no
+     SRI. It executes only under the nonce-based CSP that netlify/edge-functions/csp-nonce.js sets for these
+     pages; the strict static policy in _headers blocks it (fail closed). -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6665490745490381"
+     crossorigin="anonymous"></script>
+<!-- ADSENSE_LOADER_END -->
 <!-- jszip/mammoth/xlsx are each only needed by a handful of specific
      tools (Split/Extract Pages, PDF to Word, PDF<->Excel)
      - loaded on demand via ensureJSZip()/ensureMammoth()/ensureXLSX()
@@ -343,7 +351,7 @@
       <h2><span aria-hidden="true">❤️</span> <span data-i18n="home.supportTitle">Support YOYOPDF</span></h2>
 
       <p data-i18n="home.supportP1">A free, browser-based PDF toolkit. Every file is processed locally on your device.</p>
-      <p data-i18n="home.supportP2">No uploads. No tracking. No servers.</p>
+      <p data-i18n="home.supportP2">No file uploads. Your files stay in your browser.</p>
       <p data-i18n="home.supportP3">If YOYOPDF saves you time, please consider supporting development with any small UPI donation.</p>
       <div class="support-badges">
         <span class="support-badge"><span aria-hidden="true">⚡</span> <span data-i18n="home.trustBrowserBased">Browser Based</span></span>
@@ -521,7 +529,7 @@
     <div class="footer-col">
       <h4 data-i18n="footer.legal">Legal</h4>
       <ul>
-        <li><button data-open="privacy" data-i18n="footer.privacy">Privacy</button></li>
+        <li><a href="/privacy-policy" data-i18n="footer.privacy">Privacy</a></li>
         <li><button data-open="terms" data-i18n="footer.terms">Terms</button></li>
       </ul>
     </div>

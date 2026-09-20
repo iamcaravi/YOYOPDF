@@ -7,3 +7,26 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   X-XSS-Protection: 0
+
+# ---------------------------------------------------------------------------
+# Google AdSense / nonce CSP.
+#
+# The policy above is the STRICT policy and it stays exactly as it was. The AdSense
+# loader (pagead2.googlesyndication.com) is deliberately NOT allowed here: Google supports
+# AdSense only under a strict nonce-based CSP because its hosts change over time
+# (https://support.google.com/adsense/answer/16283098), so no host allowlist is kept.
+#
+# The AdSense-enabled HTML pages (homepage + every tool page; NOT /privacy-policy, the 404
+# page, ads.txt, assets or the API) are handled by the Edge Function
+# netlify/edge-functions/csp-nonce.js. For those GET requests it adds a fresh nonce to
+# every <script> and sets a replacement Content-Security-Policy:
+#   script-src 'nonce-<random>' 'strict-dynamic' 'self' https://cdnjs.cloudflare.com
+#   object-src 'none'; base-uri 'none'; every other directive identical to the one above.
+# It also re-sets the security headers above, because Netlify does not apply _headers to
+# edge-function output. It only transforms HTML/headers: it never sees a request body or
+# an uploaded file (PDF/image processing is entirely in the browser).
+#
+# If the function ever fails or bypasses, the response is served with the strict policy
+# above (the AdSense tag is then simply blocked) - it can never fall back to a weaker one.
+# frame-src / connect-src are intentionally NOT widened for Google's ad chain yet.
+# ---------------------------------------------------------------------------

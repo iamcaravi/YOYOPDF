@@ -35,6 +35,7 @@
 /unlock-pdf  /unlock-pdf.html  200
 /repair-pdf  /repair-pdf.html  200
 /pdf-to-powerpoint  /pdf-to-powerpoint.html  200
+/privacy-policy  /privacy-policy.html  200
 
 # Unknown routes must return a real 404 instead of a soft-200 copy of the homepage.
 /*  /404.html  404

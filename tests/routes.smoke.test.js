@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { findUnprotectedThirdPartyScripts } from "./helpers/third-party-scripts.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
@@ -10,8 +11,9 @@ const { homepageRuntime, runtimeForTool } = require("../build/runtime-manifest.j
 const registry = JSON.parse(readFileSync(resolve(ROOT, "seo/tools-registry.json"), "utf8"));
 const additional = JSON.parse(readFileSync(resolve(ROOT, "seo/additional-tools.json"), "utf8"));
 const tools = [...registry.tools, ...additional.tools].filter((tool) => tool.status !== "planned");
+const staticPages = JSON.parse(readFileSync(resolve(ROOT, "seo/static-pages.json"), "utf8")).pages;
 const appHtmlFiles = ["index.html", ...tools.map((tool) => tool.file)];
-const expectedHtmlFiles = [...appHtmlFiles, "404.html"].sort();
+const expectedHtmlFiles = [...appHtmlFiles, ...staticPages.map((page) => page.file), "404.html"].sort();
 const actualHtmlFiles = readdirSync(ROOT).filter((file) => file.endsWith(".html")).sort();
 
 function scriptTags(html) {
@@ -31,7 +33,7 @@ function externalScriptTags(html) {
 }
 
 describe("static route integrity", () => {
-  it("has exactly the homepage, every registered tool page, and the 404 page", () => {
+  it("has exactly the homepage, every registered tool page, the static pages, and the 404 page", () => {
     expect(actualHtmlFiles).toEqual(expectedHtmlFiles);
   });
 
@@ -67,11 +69,12 @@ describe("static route integrity", () => {
   }
 
   it("keeps SRI and anonymous CORS on every eager third-party script", () => {
+    // The ONLY exception is the Google-managed AdSense loader on the
+    // homepage (exact approved URL, async, crossorigin) - see the rule and
+    // its rationale in tests/helpers/third-party-scripts.js. Every other
+    // external script, on every page, still needs SRI.
     for (const file of appHtmlFiles) {
-      for (const tag of externalScriptTags(readFileSync(resolve(ROOT, file), "utf8"))) {
-        expect(tag.attributes, file + ": " + tag.src).toMatch(/\bintegrity="sha384-[^"]+"/);
-        expect(tag.attributes, file + ": " + tag.src).toContain('crossorigin="anonymous"');
-      }
+      expect(findUnprotectedThirdPartyScripts(file, readFileSync(resolve(ROOT, file), "utf8")), file).toEqual([]);
     }
   });
 

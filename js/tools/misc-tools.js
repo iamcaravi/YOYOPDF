@@ -700,7 +700,10 @@ function initLegalScrollSpy(scrollRoot, navSelector){
 const infoIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01" stroke-linecap="round"/></svg>`;
 
 /* ---- PRIVACY ----
-   Premium legal-document redesign: sticky "On this page" nav + readable
+   The footer's Privacy link now goes to the crawlable /privacy-policy page
+   (privacy-policy.html); this panel is kept in sync with the same
+   facts (browser-side file processing, advertising, cookies) and links to
+   that page. Premium legal-document redesign: sticky "On this page" nav + readable
    document layout. The ORIGINAL two paragraphs (unchanged, verbatim) are
    reorganized under real section headings - only sections with an actual
    corresponding sentence in the original text are included (no invented
@@ -731,6 +734,7 @@ TOOLS.privacy = function(){
             <a href="#privacy-overview">${t("privacy.navOverview")}</a>
             <a href="#privacy-processing">${t("privacy.navProcessing")}</a>
             <a href="#privacy-analytics">${t("privacy.navAnalytics")}</a>
+            <a href="#privacy-advertising">${t("privacy.navAdvertising")}</a>
             <a href="#privacy-cookies">${t("privacy.navCookies")}</a>
             <a href="#privacy-contact">${t("privacy.navContact")}</a>
           </nav>
@@ -793,11 +797,16 @@ TOOLS.privacy = function(){
             <h2 id="privacy-analytics">${t("privacy.sectionAnalytics")}</h2>
             <p>${t("privacy.analyticsBody")}</p>
 
+            <h2 id="privacy-advertising">${t("privacy.sectionAdvertising")}</h2>
+            <p>${t("privacy.advertisingBody")}</p>
+
             <h2 id="privacy-cookies">${t("privacy.sectionCookies")}</h2>
             <p>${t("privacy.cookiesBody")}</p>
 
             <h2 id="privacy-contact">${t("privacy.sectionContact")}</h2>
             <p>${t("privacy.contactBody")}</p>
+
+            <p><a href="/privacy-policy">${t("privacy.fullPage")} &rarr;</a></p>
           </div>
         </div>
       </div>

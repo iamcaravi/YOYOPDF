@@ -14,6 +14,7 @@ const indexableTools = tools.filter((tool) =>
   tool.indexable !== false && (tool.status === "live" || tool.status === "landing-only")
 );
 const site = registry.site;
+const staticPages = JSON.parse(readFileSync(resolve(ROOT, "seo/static-pages.json"), "utf8")).pages;
 
 function htmlFor(file) {
   return readFileSync(resolve(ROOT, file), "utf8");
@@ -104,7 +105,8 @@ describe("SEO registries and generated routes", () => {
     const urls = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
     const expected = [
       site.domain.replace(/\/$/, "") + "/",
-      ...indexableTools.map(canonicalFor)
+      ...indexableTools.map(canonicalFor),
+      ...staticPages.map((page) => site.domain.replace(/\/$/, "") + "/" + page.file.replace(/\.html$/, ""))
     ];
     expect(urls).toEqual(expected);
     expect(new Set(urls).size).toBe(urls.length);
@@ -168,7 +170,12 @@ describe("SEO registries and generated routes", () => {
       expect(directory).toContain('href="' + routeFor(tool) + '"');
     }
 
-    const knownRoutes = new Set(["/", ...indexableTools.map(routeFor)]);
+    // Static (non-tool) pages such as /privacy-policy are real routes too.
+    const knownRoutes = new Set([
+      "/",
+      ...indexableTools.map(routeFor),
+      ...staticPages.map((page) => "/" + page.file.replace(/\.html$/, ""))
+    ]);
     for (const page of ["index.html", ...indexableTools.map((tool) => tool.file)]) {
       const html = htmlFor(page);
       for (const match of html.matchAll(/<a\b[^>]*href="([^"]+)"/g)) {

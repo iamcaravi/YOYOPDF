@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { homepageRuntime, runtimeForTool } = require("./runtime-manifest.js");
+const adsense = require("./adsense-config.js");
 
 const ROOT = path.join(__dirname, "..");
 const CHECK_ONLY = process.argv.includes("--check");
@@ -11,6 +12,11 @@ function readJson(relativePath) {
 
 const registry = readJson("seo/tools-registry.json");
 const additional = readJson("seo/additional-tools.json");
+// Standalone, hand-written, indexable pages that are not tools (currently the
+// crawlable Privacy Policy). Only their metadata lives here: the generator
+// adds them to sitemap.xml and _redirects; the HTML itself is a normal
+// source file (like 404.html), verified by build/verify-dist.js and the tests.
+const staticPages = readJson("seo/static-pages.json").pages;
 const site = registry.site;
 
 const additionalNormalized = additional.tools.map((tool) => ({
@@ -37,6 +43,14 @@ function routeFor(tool) {
 
 function canonicalFor(tool) {
   return site.domain.replace(/\/$/, "") + routeFor(tool);
+}
+
+function staticRouteFor(page) {
+  return "/" + page.file.replace(/\.html$/i, "");
+}
+
+function staticCanonicalFor(page) {
+  return site.domain.replace(/\/$/, "") + staticRouteFor(page);
 }
 
 function esc(value) {
@@ -109,6 +123,29 @@ function validateRegistry() {
       }
     }
   }
+
+  // Static (non-tool) pages share the route/file/title/description
+  // namespace with the tools, so a collision is a build error, not a
+  // silently shadowed page.
+  for (const page of staticPages) {
+    for (const field of ["slug", "file", "title", "description"]) {
+      if (!page[field]) throw new Error("Static page " + (page.slug || "(unknown)") + " is missing " + field);
+    }
+    if (!/^[a-z0-9-]+\.html$/.test(page.file)) {
+      throw new Error("Static page " + page.slug + " has an unsafe or unsupported file path: " + page.file);
+    }
+    const values = {
+      slug: page.slug,
+      file: page.file,
+      route: staticRouteFor(page),
+      title: page.title,
+      description: page.description
+    };
+    for (const [kind, value] of Object.entries(values)) {
+      if (seen[kind] && seen[kind].has(value)) throw new Error("Duplicate static page " + kind + ": " + value);
+      if (seen[kind]) seen[kind].add(value);
+    }
+  }
 }
 
 validateRegistry();
@@ -121,6 +158,14 @@ const DIRECTORY_RE = /<!-- SEO_TOOL_DIRECTORY_START -->[\s\S]*?<!-- SEO_TOOL_DIR
 const TOOL_ROUTES_RE = /\/\* SEO_TOOL_ROUTES_START \*\/[\s\S]*?\/\* SEO_TOOL_ROUTES_END \*\//;
 const RUNTIME_LIBRARIES_RE = /<!-- RUNTIME_LIBRARIES_START -->[\s\S]*?<!-- RUNTIME_LIBRARIES_END -->/;
 const RUNTIME_SCRIPTS_RE = /<!-- RUNTIME_SCRIPTS_START -->[\s\S]*?<!-- RUNTIME_SCRIPTS_END -->/;
+// The AdSense loader (build/adsense-config.js) is emitted on every AdSense-enabled page:
+// the homepage and every generated tool page. index.html carries a START/END marker pair
+// (outside the runtime-library markers, so renderRuntime() can never delete it);
+// renderHomepage() fills it and renderTool() inherits it from the homepage template.
+// 404.html and the static pages (privacy-policy.html) are separate files that never
+// contain it. The strict nonce-based CSP for these pages is applied by the Edge Function
+// netlify/edge-functions/csp-nonce.js (see _headers).
+const ADSENSE_BLOCK_RE = /<!-- ADSENSE_LOADER_START -->[\s\S]*?<!-- ADSENSE_LOADER_END -->/;
 
 function replaceRequired(input, pattern, replacement, label) {
   let count = 0;
@@ -219,6 +264,17 @@ function renderRuntime(template, runtime, label) {
   out = replaceRequired(out, RUNTIME_SCRIPTS_RE, scriptBlock, label + " runtime scripts");
   return out;
 }
+function renderAdSenseBlock() {
+  return [
+    "<!-- ADSENSE_LOADER_START -->",
+    "<!-- Google AdSense loader, generated from build/adsense-config.js for the homepage and every tool page",
+    "     (never privacy-policy.html or 404.html). No ad units/containers exist yet. Google-managed script, so no",
+    "     SRI. It executes only under the nonce-based CSP that netlify/edge-functions/csp-nonce.js sets for these",
+    "     pages; the strict static policy in _headers blocks it (fail closed). -->",
+    adsense.ADSENSE_SCRIPT_TAG,
+    "<!-- ADSENSE_LOADER_END -->"
+  ].join("\n");
+}
 function renderHomepage(template) {
   const homeUrl = site.domain.replace(/\/$/, "") + "/";
   let out = template;
@@ -237,6 +293,7 @@ function renderHomepage(template) {
   out = replaceRequired(out, /<meta name="twitter:image" content="[^"]*">/, '<meta name="twitter:image" content="' + esc(site.ogImage) + '">', "homepage twitter:image");
   out = replaceRequired(out, SOFTWAREAPP_JSONLD_RE, jsonLd(homepageSoftwareSchema()), "homepage SoftwareApplication schema");
   out = replaceRequired(out, DIRECTORY_RE, renderToolDirectory(), "tool directory");
+  out = replaceRequired(out, ADSENSE_BLOCK_RE, () => renderAdSenseBlock(), "AdSense loader block");
   out = renderRuntime(out, homepageRuntime(), "homepage");
   return out;
 }
@@ -431,7 +488,8 @@ function renderRuntimeRouting() {
 
 function renderSitemap() {
   const urls = [site.domain.replace(/\/$/, "") + "/"]
-    .concat(INDEXABLE_TOOLS.map(canonicalFor));
+    .concat(INDEXABLE_TOOLS.map(canonicalFor))
+    .concat(staticPages.map(staticCanonicalFor));
   // lastmod comes from site.lastmod in seo/tools-registry.json, NOT the
   // current date. This used to be `new Date()` at generation time, which
   // made `npm run seo:check` (a byte-for-byte comparison against the
@@ -469,6 +527,7 @@ function renderRedirects() {
     "# Generated from the Phase 9 tool registries. Do not edit route rules by hand.",
     "# Explicit rewrites keep every clean URL stable on any Netlify configuration.",
     ...INDEXABLE_TOOLS.map((tool) => routeFor(tool) + "  /" + tool.file + "  200"),
+    ...staticPages.map((page) => staticRouteFor(page) + "  /" + page.file + "  200"),
     "",
     "# Unknown routes must return a real 404 instead of a soft-200 copy of the homepage.",
     "/*  /404.html  404",

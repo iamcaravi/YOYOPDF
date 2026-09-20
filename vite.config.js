@@ -17,7 +17,10 @@ const htmlEntries = Object.fromEntries(
 );
 
 const runtimeDirectories = ["js", "css", "assets"];
-const deploymentFiles = ["_headers", "_redirects", "robots.txt", "sitemap.xml"];
+// ads.txt must be served from the site root (https://yoyopdf.com/ads.txt) and
+// Netlify publishes only dist/, so it has to be copied here like the other
+// root-level deployment files.
+const deploymentFiles = ["_headers", "_redirects", "robots.txt", "sitemap.xml", "ads.txt"];
 
 /**
  * Vite intentionally leaves classic script URLs unchanged and does not discover
