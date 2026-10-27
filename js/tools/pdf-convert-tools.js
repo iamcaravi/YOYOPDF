@@ -1,4 +1,4 @@
-/* ---- PDF to Word (basic, text-only) ---- */
+/* ---- PDF to Word (geometry/style-aware: headings, tables, images, headers/footers; scanned pages fall back to a full-page image) ---- */
 TOOLS.pdf2word = function(){
   const t = window.I18N ? I18N.t : (k)=>k;
   let file=null;
@@ -764,7 +764,7 @@ TOOLS.word2pdf = function(){
   }));
 };
 
-/* ---- PDF to Excel (basic, one line of text per row) ---- */
+/* ---- PDF to Excel (page-layout aware: one worksheet per page, real column widths, merged cells, borders and number formatting) ---- */
 TOOLS.pdf2excel = function(){
   const t = window.I18N ? I18N.t : (k)=>k;
   let file=null;
@@ -951,24 +951,64 @@ TOOLS.pdf2pptx = function(){
   });
   document.getElementById("go").addEventListener("click", withToolOperation(document.getElementById("go"), async (_event, operation)=>{
     const goBtn = document.getElementById("go");
-    const out=document.getElementById("out"); out.innerHTML=statusEl(t("toolPdf2pptx.statusRenderingPages"));
+    const out=document.getElementById("out"); out.innerHTML=statusEl(t("toolPdf2pptx.statusExtracting"));
     // Same rapid-file-replacement/double-click guard as PDF to Word above.
     goBtn.disabled = true;
     try {
     await ensureJSZip();
     const bytes=await file.arrayBuffer();
     let blob;
+    let imageFallbackPages = 0, totalPages = 0, previewCanvas = null;
     try{
       const pdoc = operation.track(await loadPdfJsSafe({data:bytes}));
+      totalPages = pdoc.numPages;
       const pages = [];
       for(let i=1;i<=pdoc.numPages;i++){
-        setStatus(t("toolPdf2pptx.statusRenderingPages"), false, Math.round((i/pdoc.numPages)*90));
-        const canvas = await renderPdfPageCanvas(pdoc, i, 2);
-        const pageBlob = await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.92));
-        pages.push({blob:pageBlob, widthPx:canvas.width, heightPx:canvas.height});
+        setStatus(t("toolPdf2pptx.statusExtracting"), false, Math.round((i/pdoc.numPages)*90));
+        // Same per-page extraction as PDF to Word (see TOOLS.pdf2word):
+        // geometry/style blocks first, plain-text fallback second, and
+        // only a genuinely textless (scanned) page becomes a full-page
+        // picture - so text PDFs get editable slides instead of the old
+        // one-picture-per-slide deck, while scanned PDFs keep working.
+        const page_i = await pdoc.getPage(i);
+        const pageWidthPt = page_i.view[2]-page_i.view[0], pageHeightPt = page_i.view[3]-page_i.view[1];
+        let visuals = {images:[], shapes:[], colorSpans:[]};
+        try{ visuals = await extractPageVisuals(pdoc, i); }catch(e){ /* no vector/image/color data - text still extracts fine */ }
+        let pageBlocks = [];
+        try{ pageBlocks = await extractPageBlocks(pdoc, i, visuals); }catch(e){ /* fall through to fallbacks below */ }
+        let pageHasText = pageBlocks.some(blockHasRealText);
+        if(!pageHasText){
+          try{
+            const editableFallback = await extractPlainPageParagraphs(pdoc, i);
+            if(editableFallback.some(blockHasRealText)){ pageBlocks = editableFallback; pageHasText = true; }
+          }catch(e){ /* a genuinely textless/scanned page still uses the image fallback below */ }
+        }
+        let thisPageBlocks;
+        if(!pageHasText){
+          imageFallbackPages++;
+          const canvas = await renderPdfPageCanvas(pdoc, i, 1.6);
+          if(!previewCanvas) previewCanvas = canvas;
+          thisPageBlocks = [{type:"image", pngBase64:canvasToPngBase64(canvas), width:canvas.width, height:canvas.height,
+            widthPt:pageWidthPt, heightPt:pageHeightPt, placement:"anchored", xPt:0, yFromTopPt:0, _y:pageHeightPt}];
+        } else {
+          const pageImages = visuals.images.map(im=>({
+            type:"image", pngBase64: pdfImageToPngBase64(im.raw),
+            width: im.width, height: im.height,
+            widthPt: im.width, heightPt: im.height, _y: im.y,
+            placement: "anchored", xPt: im.x, yFromTopPt: pageHeightPt - (im.y + im.height),
+            pageWidthPt, pageHeightPt
+          }));
+          const unmatchedImages = embedImagesIntoTableCells(pageBlocks, pageImages);
+          thisPageBlocks = pageBlocks.concat(unmatchedImages).sort((a,b)=> (b._y||0) - (a._y||0));
+          if(!previewCanvas){
+            try{ previewCanvas = await renderPdfPageCanvas(pdoc, i, 1); }catch(e){ /* preview is best-effort; the deck still builds */ }
+          }
+        }
+        pages.push({pageWidthPt, pageHeightPt, blocks: thisPageBlocks});
+        if(typeof page_i.cleanup === "function") page_i.cleanup();
       }
       setStatus(t("toolPdf2pptx.statusBuilding"), false, 95);
-      blob = await buildPptxFromPageImages(pages, file.name.replace(/\.[^./\\]+$/, ""));
+      blob = await buildEditablePptx(pages, file.name.replace(/\.[^./\\]+$/, ""));
     }catch(e){
       out.innerHTML = `<div class="status" style="color:var(--rose)">${t("toolPdf2pptx.errCouldNotConvert", {msg: escapeAttr(e.message)})}</div>`;
       return;
@@ -977,9 +1017,11 @@ TOOLS.pdf2pptx = function(){
     setStatus(T("workspace.statusPreparingDownload"));
     if(!operation.isCurrent()) return;
     const {url}=downloadBlob(blob,outName);
-    setStatus(t("toolPdf2pptx.doneNotEditable"), true);
+    setStatus(imageFallbackPages === totalPages ? t("toolPdf2pptx.doneNotEditable")
+      : imageFallbackPages > 0 ? t("toolPdf2pptx.doneEditableMixed", {n: imageFallbackPages})
+      : t("toolPdf2pptx.doneEditable"), true);
     if(!operation.isCurrent()) return;
-    out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, url, filename:outName}));
+    out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:previewCanvas, url, filename:outName}));
     } finally {
       goBtn.disabled = false;
     }

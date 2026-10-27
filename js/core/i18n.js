@@ -522,12 +522,15 @@
     "toolPdf2excel.statusDetectingTables":"Detecting tables...",
     "toolPdf2excel.statusBuilding":"Building Excel workbook...",
 
-    "toolPdf2pptx.heroDesc":"Turns every page into its own slide, image-based for pixel-perfect layout.",
+    "toolPdf2pptx.heroDesc":"Turns every page into its own slide — text and tables stay editable in PowerPoint; scanned pages keep their exact look as pictures.",
     "toolPdf2pptx.convertToPowerPoint":"Convert to PowerPoint",
     "toolPdf2pptx.statusRenderingPages":"Rendering PDF pages...",
+    "toolPdf2pptx.statusExtracting":"Reading text, tables and images from PDF pages...",
     "toolPdf2pptx.statusBuilding":"Building presentation...",
     "toolPdf2pptx.errCouldNotConvert":"Could not convert this PDF ({{msg}}). Try a different file.",
     "toolPdf2pptx.doneNotEditable":"Done — each page became a full-slide image; text isn't editable in PowerPoint",
+    "toolPdf2pptx.doneEditable":"Done — text and tables are now editable in PowerPoint",
+    "toolPdf2pptx.doneEditableMixed":"Done — text pages are editable; {{n}} scanned page(s) kept as pictures to preserve their exact look",
 
     "toolExcel2pdf.heroDesc":"Converts every worksheet into one paginated table PDF.",
     "toolExcel2pdf.allSheetsNote":"Every worksheet is converted in workbook order, including empty sheets.",
@@ -1206,12 +1209,15 @@
     "toolPdf2excel.statusDetectingTables":"तालिकाएं पहचानी जा रही हैं...",
     "toolPdf2excel.statusBuilding":"एक्सेल वर्कबुक बनाई जा रही है...",
 
-    "toolPdf2pptx.heroDesc":"हर पेज को अपनी खुद की स्लाइड में बदलता है, पिक्सेल-परफेक्ट लेआउट के लिए इमेज-आधारित।",
+    "toolPdf2pptx.heroDesc":"हर पेज को अपनी खुद की स्लाइड में बदलता है — टेक्स्ट और टेबल PowerPoint में संपादन योग्य रहते हैं; स्कैन किए गए पेज अपनी असली दिखावट के साथ इमेज के रूप में रहते हैं।",
     "toolPdf2pptx.convertToPowerPoint":"पावरपॉइंट में बदलें",
     "toolPdf2pptx.statusRenderingPages":"PDF पेज रेंडर हो रहे हैं...",
+    "toolPdf2pptx.statusExtracting":"PDF पेजों से टेक्स्ट, टेबल और इमेज पढ़े जा रहे हैं...",
     "toolPdf2pptx.statusBuilding":"प्रेजेंटेशन बनाया जा रहा है...",
     "toolPdf2pptx.errCouldNotConvert":"इस PDF को बदला नहीं जा सका ({{msg}})। कोई अन्य फ़ाइल आज़माएं।",
     "toolPdf2pptx.doneNotEditable":"पूर्ण — हर पेज पूर्ण-स्लाइड इमेज बन गया; PowerPoint में टेक्स्ट संपादन योग्य नहीं है",
+    "toolPdf2pptx.doneEditable":"पूर्ण — PowerPoint में टेक्स्ट और टेबल अब संपादन योग्य हैं",
+    "toolPdf2pptx.doneEditableMixed":"पूर्ण — टेक्स्ट वाले पेज संपादन योग्य हैं; {{n}} स्कैन किए गए पेज अपनी असली दिखावट बनाए रखने के लिए इमेज के रूप में रखे गए हैं",
 
     "toolExcel2pdf.heroDesc":"हर वर्कशीट को एक पृष्ठांकित तालिका PDF में बदलता है।",
     "toolExcel2pdf.allSheetsNote":"खाली शीट सहित हर वर्कशीट को मूल क्रम में बदला जाता है।",
