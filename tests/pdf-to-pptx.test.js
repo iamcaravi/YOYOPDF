@@ -17,7 +17,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let sandbox;
 beforeAll(() => {
   sandbox = vm.createContext({
-    console, pdfjsLib, XLSX: null, JSZip,
+    console, pdfjsLib, XLSX: null, JSZip, setTimeout, clearTimeout,
     ensureJSZip: async () => {},
   });
   vm.runInContext(readFileSync(resolve(ROOT, "js/core/doc-export-builders.js"), "utf8"), sandbox, { filename: "doc-export-builders.js" });

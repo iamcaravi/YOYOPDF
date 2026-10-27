@@ -40,6 +40,7 @@ const SCRIPT_ORDER = Object.freeze([
   "js/tools/pdf-page-tools-1.js",
   "js/tools/pdf-page-tools-2.js",
   "js/core/doc-export-builders.js",
+  "js/tools/pdf-extra-tools.js",
   "js/core/xlsx-merge.js",
   "js/core/krutidev-to-unicode.js",
   "js/core/docx-reader.js",
@@ -71,6 +72,7 @@ const PROFILE_SCRIPTS = Object.freeze({
   signing: Object.freeze(["js/core/pdf-canvas-widgets.js", "js/tools/pdf-signing-tools.js"]),
   image: Object.freeze(["js/tools/image-tools.js"]),
   security: Object.freeze(["js/core/pdf-crypto.js", "js/core/pdf-canvas-widgets.js", "js/tools/pdf-security-tools.js"]),
+  extra: Object.freeze(["js/core/doc-export-builders.js", "js/tools/pdf-extra-tools.js"]),
   editor: Object.freeze([])
 });
 
@@ -84,6 +86,9 @@ const TOOL_PROFILES = Object.freeze({
   sign:"signing", fillform:"signing",
   imgcompress:"image", imgresize:"image", imgcrop:"image", imgconvert:"image", imgwatermark:"image", imginvert:"image",
   protect:"security", unlock:"security", repair:"security",
+  extractimages:"extra", pdfcounter:"extra", extracttext:"extra", pdfmetadata:"extra",
+  pdf2md:"extra", resizepages:"extra", comparepdf:"extra", scantopdf:"extra",
+  imgrotate:"image",
   edit:"editor"
 });
 

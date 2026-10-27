@@ -298,6 +298,7 @@ describe("stats helpers", () => {
     const s = JSON.parse(JSON.stringify(get("newCompressStats")()));
     expect(s).toEqual({
       found: 0, eligible: 0, replaced: 0, noGain: 0, decodeFailed: 0, maskImages: 0, documentPages: 0,
+      fromIndexed: 0, fromCmyk: 0, alphaComposited: 0,
       skipped: { unsupportedFilter: 0, alpha: 0, masked: 0, decode: 0, colorSpace: 0, unsupportedParams: 0, error: 0 },
     });
   });

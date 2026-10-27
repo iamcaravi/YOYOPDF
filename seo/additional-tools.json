@@ -1150,6 +1150,871 @@
         "pdf-to-word",
         "merge-pdf"
       ]
+    },
+    {
+      "slug": "extract-images",
+      "file": "extract-images.html",
+      "toolId": "extractimages",
+      "status": "live",
+      "category": "convert",
+      "name": "Extract Images from PDF",
+      "title": "Extract Images from PDF Free Online — Save Embedded Pictures | YOYOPDF",
+      "description": "Pull every embedded image out of a PDF as PNG files, free and browser-based. No upload, no sign-up, duplicates removed automatically.",
+      "h1": "Extract Images from PDF",
+      "heroValueProp": "Save every picture embedded in a PDF — logos, photos, diagrams — as its own PNG file, right in your browser.",
+      "faqs": [
+        {
+          "q": "Is my PDF uploaded to extract its images?",
+          "a": "No. The PDF is read locally in your browser with pdf.js — nothing leaves your device."
+        },
+        {
+          "q": "What format are the extracted images?",
+          "a": "PNG, at the image's original embedded resolution. The same picture used on several pages is saved once, with every page listed."
+        },
+        {
+          "q": "Will this work on a scanned PDF?",
+          "a": "A scanned page is itself one big image, so it extracts as that single page image. Text-only PDFs with no embedded pictures return no images."
+        }
+      ],
+      "relatedSlugs": [
+        "pdf-to-jpg",
+        "extract-pages",
+        "pdf-to-word"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "A PDF locks its pictures inside the document. Extracting them recovers the original images without screenshots or recompression.",
+          "points": [
+            {
+              "title": "A logo or photo is needed on its own",
+              "desc": "Marketing assets, diagrams and photos buried in a report can be reused once they are saved as standalone image files."
+            },
+            {
+              "title": "Screenshots lose quality",
+              "desc": "A screenshot re-renders the page at screen resolution. Extraction pulls the embedded image bytes at their original resolution."
+            },
+            {
+              "title": "Duplicates waste time",
+              "desc": "The same header logo on forty pages is one image, not forty copies — duplicates are removed automatically."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload",
+            "desc": "Add the PDF. It is read locally in your browser and never uploaded."
+          },
+          {
+            "title": "Scan",
+            "desc": "Every page's embedded images are enumerated, deduplicated, and thumbnailed with their page numbers."
+          },
+          {
+            "title": "Download",
+            "desc": "Download images individually, or all of them together as a ZIP file."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Original resolution",
+            "desc": "Images are saved at the resolution embedded in the PDF, not screen resolution."
+          },
+          {
+            "title": "Automatic dedupe",
+            "desc": "The same image reused across pages is listed once, with every page it appears on."
+          },
+          {
+            "title": "Page numbers",
+            "desc": "Each image shows the pages it was found on, so you can trace it back to the document."
+          },
+          {
+            "title": "ZIP download",
+            "desc": "Many images download together as one ZIP file instead of one click each."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Recovering assets from a report",
+            "desc": "Pull charts, photos and logos out of a PDF when the original design files are gone."
+          },
+          {
+            "title": "Checking what a PDF contains",
+            "desc": "See at a glance every picture embedded in a document before sharing it onward."
+          },
+          {
+            "title": "Reusing diagrams",
+            "desc": "Save a diagram from a manual or paper as an image for a presentation or a new document."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "pdf-counter",
+      "file": "pdf-counter.html",
+      "toolId": "pdfcounter",
+      "status": "live",
+      "category": "optimize",
+      "name": "PDF Counter",
+      "title": "PDF Counter Free Online — Count Pages, Words, Characters & Images | YOYOPDF",
+      "description": "Count a PDF's pages, words, characters and embedded images, with a per-page breakdown and estimated reading time. Free, browser-based, no upload.",
+      "h1": "PDF Counter",
+      "heroValueProp": "See exactly what's inside a PDF — pages, words, characters, images and reading time — in seconds, without uploading it anywhere.",
+      "faqs": [
+        {
+          "q": "Is my PDF uploaded to count it?",
+          "a": "No. Counting runs entirely in your browser — the file never leaves your device."
+        },
+        {
+          "q": "What does the reading time estimate assume?",
+          "a": "About 200 words per minute, the standard estimate. It is a rough guide, not a measurement of any individual reader."
+        },
+        {
+          "q": "Why does a scanned PDF show zero words?",
+          "a": "Scanned pages are pictures of text, not text itself, and this site has no OCR. Only real, selectable text can be counted."
+        }
+      ],
+      "relatedSlugs": [
+        "extract-text",
+        "compress-pdf",
+        "pdf-to-word"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "Before editing, billing, or quoting for a document, you need to know how much is actually in it. Counting answers that in one step.",
+          "points": [
+            {
+              "title": "Quotes and billing",
+              "desc": "Translators, editors and designers routinely price work by word count — this gives the number without opening a word processor."
+            },
+            {
+              "title": "Length checks",
+              "desc": "Submissions, essays and reports often have word or page limits. A quick count confirms compliance before sending."
+            },
+            {
+              "title": "Reading time",
+              "desc": "An estimated reading time helps decide whether a document is a quick skim or a sit-down read."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload",
+            "desc": "Add the PDF. Counting starts locally in your browser."
+          },
+          {
+            "title": "Count",
+            "desc": "Pages, words, characters and embedded images are tallied, page by page."
+          },
+          {
+            "title": "Review",
+            "desc": "See the totals, the per-page breakdown and the reading-time estimate, and copy the results."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Per-page breakdown",
+            "desc": "Words, characters and images are shown for every page, not just the document total."
+          },
+          {
+            "title": "Characters with and without spaces",
+            "desc": "Both counts are reported, since different tools and limits use different definitions."
+          },
+          {
+            "title": "Copy results",
+            "desc": "One click copies the full count summary as plain text."
+          },
+          {
+            "title": "Honest scanned PDFs",
+            "desc": "Image-only pages report zero countable words instead of inventing a number."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Checking a word limit",
+            "desc": "Confirm an essay, article or submission is within its word or character limit."
+          },
+          {
+            "title": "Estimating translation work",
+            "desc": "Get the word count a translator needs before requesting a quote."
+          },
+          {
+            "title": "Auditing a document set",
+            "desc": "Compare page and image counts across versions of the same document."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "extract-text",
+      "file": "extract-text.html",
+      "toolId": "extracttext",
+      "status": "live",
+      "category": "convert",
+      "name": "Extract Text from PDF",
+      "title": "Extract Text from PDF Free Online — PDF to Text | YOYOPDF",
+      "description": "Copy the text out of a PDF into a plain .txt file, page by page, free and browser-based. No upload, no sign-up.",
+      "h1": "Extract Text from PDF",
+      "heroValueProp": "Turn a PDF's text into a plain text file you can paste anywhere — done locally in your browser, nothing uploaded.",
+      "faqs": [
+        {
+          "q": "Is my PDF uploaded to extract its text?",
+          "a": "No. Extraction runs entirely in your browser with pdf.js — nothing leaves your device."
+        },
+        {
+          "q": "Can I extract only some pages?",
+          "a": "Yes. Choose exactly which pages to include before extracting; every page is selected by default."
+        },
+        {
+          "q": "Why is a scanned PDF's text file empty?",
+          "a": "Scanned pages contain pictures of text, not selectable text, and this site has no OCR. Only PDFs with a real text layer yield text."
+        }
+      ],
+      "relatedSlugs": [
+        "pdf-to-word",
+        "pdf-counter",
+        "pdf-to-markdown"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "Sometimes the document itself is in the way — what you need is just the words, in a form any editor, search box or script can use.",
+          "points": [
+            {
+              "title": "Reuse the wording",
+              "desc": "Lift text from a PDF into an email, a document or a form without retyping it or fighting with copy-paste formatting."
+            },
+            {
+              "title": "Search and index",
+              "desc": "Plain text can be searched, diffed and indexed by tools that cannot read inside a PDF."
+            },
+            {
+              "title": "Accessibility",
+              "desc": "A text version is easier to read with screen readers and to reformat for large print."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload",
+            "desc": "Add the PDF. It stays on your device the whole time."
+          },
+          {
+            "title": "Pick pages",
+            "desc": "Keep all pages, or uncheck the ones you don't need."
+          },
+          {
+            "title": "Download",
+            "desc": "Get a .txt file with page markers, or copy the text straight from the preview."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Page selection",
+            "desc": "Extract the whole document or only the pages you choose."
+          },
+          {
+            "title": "Page markers",
+            "desc": "The text file marks where each page begins, so nothing gets silently merged."
+          },
+          {
+            "title": "Copy button",
+            "desc": "Copy the extracted text to the clipboard without downloading anything."
+          },
+          {
+            "title": "Honest limits",
+            "desc": "Scanned, image-only pages are reported as having no extractable text instead of producing garbage."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Quoting a document",
+            "desc": "Pull an exact passage into a reply or a citation without retyping."
+          },
+          {
+            "title": "Feeding another tool",
+            "desc": "Turn a PDF into text for a spreadsheet, a search, or a script that only accepts plain text."
+          },
+          {
+            "title": "Archiving content",
+            "desc": "Keep a lightweight text copy of a document alongside the original PDF."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "edit-pdf-metadata",
+      "file": "edit-pdf-metadata.html",
+      "toolId": "pdfmetadata",
+      "status": "live",
+      "category": "edit",
+      "name": "Edit PDF Metadata",
+      "title": "Edit PDF Metadata Free Online — Change Title, Author & More | YOYOPDF",
+      "description": "View and edit a PDF's title, author, subject, keywords and dates, or remove all metadata, free in your browser. No upload, no sign-up.",
+      "h1": "Edit PDF Metadata",
+      "heroValueProp": "Fix a PDF's title, author and keywords — or strip all metadata before sharing — without uploading the file anywhere.",
+      "faqs": [
+        {
+          "q": "Is my PDF uploaded to edit its metadata?",
+          "a": "No. The file is read and rewritten locally in your browser with pdf-lib — nothing leaves your device."
+        },
+        {
+          "q": "Does editing metadata change the document's pages?",
+          "a": "No. Only the document information entries change; every page stays byte-identical in content."
+        },
+        {
+          "q": "Can I remove all metadata at once?",
+          "a": "Yes. Tick the clear-all option and every metadata field is blanked in one pass."
+        }
+      ],
+      "relatedSlugs": [
+        "protect-pdf",
+        "edit-pdf",
+        "compress-pdf"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "A PDF carries hidden details — who made it, when, and what it's called. Those details show up in readers, search results and file listings, so they should say the right thing.",
+          "points": [
+            {
+              "title": "A wrong title in the reader tab",
+              "desc": "PDF readers show the document title, not the filename. Fixing the title fixes what recipients actually see."
+            },
+            {
+              "title": "Sharing without traces",
+              "desc": "Author names, software tags and timestamps can leak more than intended. Stripping metadata is a one-click privacy step."
+            },
+            {
+              "title": "Findable documents",
+              "desc": "A real title, subject and keywords make a document searchable in libraries and document stores."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload",
+            "desc": "Add the PDF. Its current metadata is read locally and shown in the form."
+          },
+          {
+            "title": "Edit",
+            "desc": "Change any field, or tick clear-all to blank them all."
+          },
+          {
+            "title": "Download",
+            "desc": "Download the same PDF with only its metadata changed."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "All standard fields",
+            "desc": "Title, author, subject, keywords, creator, producer and both dates."
+          },
+          {
+            "title": "Clear-all in one click",
+            "desc": "Blank every metadata field at once before sharing a sensitive file."
+          },
+          {
+            "title": "Pages untouched",
+            "desc": "Only the information dictionary changes; page content is not re-rendered."
+          },
+          {
+            "title": "Free, no account",
+            "desc": "Metadata editing elsewhere is often a paid desktop feature. Here it is free in the browser."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Preparing a document for publication",
+            "desc": "Set the correct title and author before a PDF goes on a website or into a library."
+          },
+          {
+            "title": "Privacy before sharing",
+            "desc": "Remove author and software traces from a file headed outside your organisation."
+          },
+          {
+            "title": "Fixing an export",
+            "desc": "Correct the generic title a printer driver or scanner stamped on the file."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "pdf-to-markdown",
+      "file": "pdf-to-markdown.html",
+      "toolId": "pdf2md",
+      "status": "live",
+      "category": "convert",
+      "name": "PDF to Markdown",
+      "title": "PDF to Markdown Converter Free Online | YOYOPDF",
+      "description": "Convert a PDF into Markdown with headings, tables and lists preserved, free and browser-based. No upload, no AI, no sign-up.",
+      "h1": "PDF to Markdown",
+      "heroValueProp": "Turn a PDF into clean Markdown — headings, tables and lists intact — for docs, notes and wikis, without uploading it.",
+      "faqs": [
+        {
+          "q": "Is my PDF uploaded to convert it?",
+          "a": "No. The same block extraction behind PDF to Word runs locally in your browser — nothing leaves your device."
+        },
+        {
+          "q": "Are tables preserved?",
+          "a": "Yes, as GitHub-style pipe tables, including spanned cells. Very complex multi-column layouts are flattened in reading order and may need a quick tidy-up."
+        },
+        {
+          "q": "What happens to images in the PDF?",
+          "a": "Images are not embedded in the Markdown file. Scanned, image-only pages produce no text — this site has no OCR."
+        }
+      ],
+      "relatedSlugs": [
+        "pdf-to-word",
+        "extract-text",
+        "pdf-to-excel"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "Documentation lives in Markdown now — wikis, static sites, notes apps. A PDF's content locked in a fixed layout can't join it until it's converted.",
+          "points": [
+            {
+              "title": "Docs and wikis",
+              "desc": "Move a spec, manual or report into a Markdown-based docs site with its structure intact."
+            },
+            {
+              "title": "Notes and drafts",
+              "desc": "Bring PDF content into a notes app as editable text instead of an attachment nobody can search."
+            },
+            {
+              "title": "No AI in the loop",
+              "desc": "The conversion is structural — headings, tables and lists from the document's own geometry — not a language model guessing at it."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload",
+            "desc": "Add the PDF. It is analysed locally in your browser."
+          },
+          {
+            "title": "Structure",
+            "desc": "Headings are inferred from size and weight, tables from ruling lines and column geometry, lists from their markers."
+          },
+          {
+            "title": "Download",
+            "desc": "Get a .md file, or copy the Markdown from the preview."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Real headings",
+            "desc": "Titles and section headings become ATX headings, not just bigger bold text."
+          },
+          {
+            "title": "GFM tables",
+            "desc": "Tables convert to pipe tables with alignment preserved as far as the geometry allows."
+          },
+          {
+            "title": "Lists and links",
+            "desc": "Bulleted and numbered lists keep their markers; links keep their targets."
+          },
+          {
+            "title": "Page markers",
+            "desc": "HTML comments mark page boundaries so the source layout stays traceable."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Migrating documentation",
+            "desc": "Move legacy PDF manuals into a Markdown docs site page by page."
+          },
+          {
+            "title": "Preparing content for editing",
+            "desc": "Get a PDF's text into an editable, diffable format for revision."
+          },
+          {
+            "title": "Building a knowledge base",
+            "desc": "Convert reference PDFs into searchable Markdown notes."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "resize-page-size",
+      "file": "resize-page-size.html",
+      "toolId": "resizepages",
+      "status": "live",
+      "category": "organize",
+      "name": "Resize Page Size",
+      "title": "Resize PDF Page Size Free Online — A4, Letter, Legal | YOYOPDF",
+      "description": "Change every PDF page to A4, US Letter, Legal or a custom size, free in your browser. Text and vectors scale losslessly — no upload, no sign-up.",
+      "h1": "Resize Page Size",
+      "heroValueProp": "Put every page of a PDF onto A4, Letter, Legal or a custom size — text stays sharp, because pages are scaled, not re-rendered.",
+      "faqs": [
+        {
+          "q": "Is my PDF uploaded to resize its pages?",
+          "a": "No. Pages are re-laid out locally in your browser with pdf-lib — nothing leaves your device."
+        },
+        {
+          "q": "Does resizing reduce quality?",
+          "a": "Text and vector graphics scale losslessly. Only embedded raster images resample visually, as they must at a new size."
+        },
+        {
+          "q": "Can I resize only some pages?",
+          "a": "This tool applies one size to all pages. For mixed sizes, split the file first, resize each part, and merge them back."
+        }
+      ],
+      "relatedSlugs": [
+        "crop-pdf",
+        "organize-pdf",
+        "jpg-to-pdf"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "PDFs arrive in whatever size their author used. Printers, forms and archives expect standard sizes — resizing bridges that gap without rebuilding the document.",
+          "points": [
+            {
+              "title": "Printing on standard paper",
+              "desc": "A US Letter document headed for an A4 printer, or vice versa, prints at the wrong scale until its pages match the paper."
+            },
+            {
+              "title": "Form and archive rules",
+              "desc": "Submissions and archives often mandate A4 or Letter. Resizing is the compliant step before filing."
+            },
+            {
+              "title": "Consistent documents",
+              "desc": "Merging files of mixed sizes leaves a ragged document. Normalising page size first keeps the merged result uniform."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload",
+            "desc": "Add the PDF. Its current page sizes are read locally."
+          },
+          {
+            "title": "Choose",
+            "desc": "Pick A4, Letter, Legal or a custom size, an orientation, and how pages fit the new box."
+          },
+          {
+            "title": "Download",
+            "desc": "Every page is re-placed at the new size in one PDF."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Standard presets",
+            "desc": "A4, US Letter and US Legal in one click, plus fully custom width and height."
+          },
+          {
+            "title": "Four fit modes",
+            "desc": "Fit, fill, stretch or centre — choose whether proportions, coverage or position wins."
+          },
+          {
+            "title": "Lossless text",
+            "desc": "Pages are embedded and scaled, not rasterised, so text stays selectable and sharp."
+          },
+          {
+            "title": "Orientation control",
+            "desc": "Force portrait or landscape independently of the chosen size."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Preparing to print",
+            "desc": "Match a document to the paper size actually loaded in the printer."
+          },
+          {
+            "title": "Normalising a merged file",
+            "desc": "Bring mixed-size sources to one size before or after merging."
+          },
+          {
+            "title": "Meeting a submission spec",
+            "desc": "Deliver a PDF at exactly the page size a form or archive requires."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "compare-pdf",
+      "file": "compare-pdf.html",
+      "toolId": "comparepdf",
+      "status": "live",
+      "category": "edit",
+      "name": "Compare PDF",
+      "title": "Compare Two PDFs Free Online — Find Text Differences | YOYOPDF",
+      "description": "Compare two PDFs side by side and highlight added and removed words on every page, free in your browser. No upload, no sign-up.",
+      "h1": "Compare PDF",
+      "heroValueProp": "See exactly what changed between two versions of a PDF — word by word, page by page — without uploading either file.",
+      "faqs": [
+        {
+          "q": "Are my PDFs uploaded to compare them?",
+          "a": "No. Both files are read and diffed locally in your browser — nothing leaves your device."
+        },
+        {
+          "q": "What counts as a change?",
+          "a": "Added and removed words, highlighted in place on each page, with a summary of totals and which pages changed."
+        },
+        {
+          "q": "Why do scanned pages show no differences?",
+          "a": "Comparison reads selectable text. Scanned, image-only pages have no text layer to compare, and this site has no OCR."
+        }
+      ],
+      "relatedSlugs": [
+        "pdf-to-word",
+        "organize-pdf",
+        "extract-text"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "Two versions of the same document, and no one remembers what changed. A word-level diff answers that in seconds instead of a manual read-through.",
+          "points": [
+            {
+              "title": "Contract and policy review",
+              "desc": "Spot a changed figure, date or clause between drafts before signing off."
+            },
+            {
+              "title": "Proofing revisions",
+              "desc": "Confirm an edit round changed only what was requested — and nothing else."
+            },
+            {
+              "title": "Auditing submissions",
+              "desc": "Check a resubmitted document against the original to see what was actually revised."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload both",
+            "desc": "Add the original PDF, then the revised one. Both stay on your device."
+          },
+          {
+            "title": "Diff",
+            "desc": "Each page pair is compared word by word in your browser."
+          },
+          {
+            "title": "Review",
+            "desc": "Scroll the synchronised side-by-side view; changed pages are flagged and changes highlighted."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Word-level highlighting",
+            "desc": "Added words and removed words are marked in place, not just whole changed lines."
+          },
+          {
+            "title": "Synchronised scrolling",
+            "desc": "Both panes scroll together, so the same page stays in view on both sides."
+          },
+          {
+            "title": "Change summary",
+            "desc": "Totals for added and removed words, plus a count of changed pages, up front."
+          },
+          {
+            "title": "Page-by-page",
+            "desc": "Each page pair is its own section, so long documents stay navigable."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Reviewing a new draft",
+            "desc": "Verify exactly what an author or counterparty changed in the latest version."
+          },
+          {
+            "title": "Checking a correction",
+            "desc": "Confirm a requested fix landed and no surrounding text shifted."
+          },
+          {
+            "title": "Version control for documents",
+            "desc": "Record what changed between archived versions of a policy or report."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "scan-to-pdf",
+      "file": "scan-to-pdf.html",
+      "toolId": "scantopdf",
+      "status": "live",
+      "category": "convert",
+      "name": "Scan to PDF",
+      "title": "Scan to PDF Free Online — Camera & Photos to PDF | YOYOPDF",
+      "description": "Photograph pages with your camera or upload photos and build a PDF, free in your browser. No upload, no OCR, no sign-up.",
+      "h1": "Scan to PDF",
+      "heroValueProp": "Turn photographed pages into a PDF with your camera or photo uploads — assembled locally, with no upload and no OCR step.",
+      "faqs": [
+        {
+          "q": "Are my photos uploaded?",
+          "a": "No. Camera captures and uploads stay in your browser; the PDF is built locally on your device."
+        },
+        {
+          "q": "Will the PDF be searchable text?",
+          "a": "No. Scanned pages are images inside the PDF. This site has no OCR, so no text layer is added — the pages keep their exact photographed look."
+        },
+        {
+          "q": "Can I reorder or retake pages?",
+          "a": "Yes. Reorder shots with the arrow buttons, remove any shot, or retake it before building the PDF."
+        }
+      ],
+      "relatedSlugs": [
+        "jpg-to-pdf",
+        "pdf-to-jpg",
+        "compress-pdf"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "A paper document, a receipt, a whiteboard — the fastest way to a shareable PDF is often the camera already in your hand.",
+          "points": [
+            {
+              "title": "Paper to PDF in seconds",
+              "desc": "Photograph each page, reorder, and get one PDF — no scanner, no app install, no upload queue."
+            },
+            {
+              "title": "Receipts and forms",
+              "desc": "Capture receipts, signed forms and notes as a single document you can file or forward."
+            },
+            {
+              "title": "Exact look preserved",
+              "desc": "Pages keep their photographed appearance, handwriting and stamps included, with no OCR reinterpretation."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Capture or upload",
+            "desc": "Use the camera to photograph pages, or upload existing photos."
+          },
+          {
+            "title": "Arrange",
+            "desc": "Reorder shots, remove the bad ones, and choose a page size."
+          },
+          {
+            "title": "Build",
+            "desc": "One PDF is assembled locally, one page per photo."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Camera capture",
+            "desc": "Photograph pages directly in the browser, multi-shot, with retakes."
+          },
+          {
+            "title": "Reorder and remove",
+            "desc": "Fix the page order before building — no rebuilding to correct one swapped page."
+          },
+          {
+            "title": "Page sizes",
+            "desc": "Fit to each photo, or standardise on A4 or US Letter with margins."
+          },
+          {
+            "title": "No OCR claims",
+            "desc": "The PDF is honestly image-only. Nothing pretends the pages contain searchable text."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Digitising paper",
+            "desc": "Turn a stack of paper pages into a single PDF for filing."
+          },
+          {
+            "title": "Receipts on the go",
+            "desc": "Photograph receipts and build one expense PDF before they fade."
+          },
+          {
+            "title": "Sharing handwritten notes",
+            "desc": "Send whiteboard or notebook pages as a tidy PDF instead of loose photos."
+          }
+        ]
+      }
+    },
+    {
+      "slug": "rotate-image",
+      "file": "rotate-image.html",
+      "toolId": "imgrotate",
+      "status": "live",
+      "category": "images",
+      "name": "Rotate Image",
+      "title": "Rotate Image Free Online — Rotate JPG, PNG, WebP | YOYOPDF",
+      "description": "Rotate images 90, 180 or 270 degrees, or any custom angle, free in your browser. Batch up to 30 images — no upload, no sign-up.",
+      "h1": "Rotate Image",
+      "heroValueProp": "Fix sideways photos and scans — rotate one image or a whole batch, right in your browser.",
+      "faqs": [
+        {
+          "q": "Are my images uploaded?",
+          "a": "No. Rotation happens locally in your browser with canvas — nothing leaves your device."
+        },
+        {
+          "q": "Can I rotate several images at once?",
+          "a": "Yes, up to 30 at a time. All of them rotate by the same angle and download together as a ZIP."
+        },
+        {
+          "q": "Does rotation lose quality?",
+          "a": "The image is re-encoded at quality 0.92 in its original format. A 90, 180 or 270 degree turn is lossless in geometry; only the re-encode touches pixels."
+        }
+      ],
+      "relatedSlugs": [
+        "resize-image",
+        "crop-image",
+        "rotate-pdf"
+      ],
+      "landing": {
+        "whyUse": {
+          "intro": "Phone photos and scans arrive sideways more often than anyone admits. A quick rotation is the difference between a usable image and a deleted one.",
+          "points": [
+            {
+              "title": "Sideways photos",
+              "desc": "A photo taken in the wrong orientation reads wrong everywhere until it is rotated to match how it was seen."
+            },
+            {
+              "title": "Scanned pages",
+              "desc": "A scan fed in upside down or landscape needs rotating before it can be read or filed."
+            },
+            {
+              "title": "Batch cleanup",
+              "desc": "A whole shoot or scan batch with the same wrong orientation is fixed in one pass, not one file at a time."
+            }
+          ]
+        },
+        "howItWorks": [
+          {
+            "title": "Upload",
+            "desc": "Add one image or a batch of up to 30. Nothing is uploaded."
+          },
+          {
+            "title": "Choose an angle",
+            "desc": "Pick 90, 180 or 270 degrees, or type any custom angle."
+          },
+          {
+            "title": "Download",
+            "desc": "One image downloads directly; a batch downloads as a ZIP."
+          }
+        ],
+        "keyFeatures": [
+          {
+            "title": "Preset angles",
+            "desc": "90, 180 and 270 degree turns in one click, with the canvas resized to fit."
+          },
+          {
+            "title": "Custom angles",
+            "desc": "Any angle from -360 to 360 degrees, rendered on the tightest bounding box."
+          },
+          {
+            "title": "Batch mode",
+            "desc": "Up to 30 images rotated together, with per-file failures skipped and counted."
+          },
+          {
+            "title": "Format preserved",
+            "desc": "PNG stays PNG, WebP stays WebP — the output format follows the input."
+          }
+        ],
+        "useCases": [
+          {
+            "title": "Fixing phone photos",
+            "desc": "Rotate a sideways shot before posting or printing it."
+          },
+          {
+            "title": "Straightening scans",
+            "desc": "Correct the orientation of scanned pages and documents."
+          },
+          {
+            "title": "Preparing image sets",
+            "desc": "Normalise the orientation of a whole batch before it goes into a document or gallery."
+          }
+        ]
+      }
     }
   ]
 }
+

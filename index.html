@@ -94,7 +94,16 @@
     "Invert Image Colors",
     "Unlock PDF",
     "Repair PDF",
-    "PDF to PowerPoint"
+    "PDF to PowerPoint",
+    "Extract Images from PDF",
+    "PDF Counter",
+    "Extract Text from PDF",
+    "Edit PDF Metadata",
+    "PDF to Markdown",
+    "Resize Page Size",
+    "Compare PDF",
+    "Scan to PDF",
+    "Rotate Image"
   ]
 }
 </script>
@@ -402,6 +411,7 @@
           <li><a href="/merge-pdf">Merge PDF</a></li>
           <li><a href="/organize-pdf">Organize PDF</a></li>
           <li><a href="/reorder-pages">Reorder Pages</a></li>
+          <li><a href="/resize-page-size">Resize Page Size</a></li>
           <li><a href="/rotate-pdf">Rotate PDF</a></li>
           <li><a href="/split-pdf">Split PDF</a></li>
         </ul>
@@ -411,8 +421,10 @@
         <ul>
           <li><a href="/header-footer">Add Header &amp; Footer</a></li>
           <li><a href="/page-numbers">Add Page Numbers</a></li>
+          <li><a href="/compare-pdf">Compare PDF</a></li>
           <li><a href="/crop-pdf">Crop PDF</a></li>
           <li><a href="/edit-pdf">Edit PDF</a></li>
+          <li><a href="/edit-pdf-metadata">Edit PDF Metadata</a></li>
           <li><a href="/fill-pdf-form">Fill PDF Form</a></li>
           <li><a href="/invert-pdf-colors">Invert PDF Colors</a></li>
           <li><a href="/watermark-pdf">Watermark PDF</a></li>
@@ -432,6 +444,7 @@
         <ul>
           <li><a href="/compress-pdf">Compress PDF</a></li>
           <li><a href="/image-compressor">Image Compressor</a></li>
+          <li><a href="/pdf-counter">PDF Counter</a></li>
           <li><a href="/repair-pdf">Repair PDF</a></li>
         </ul>
       </div>
@@ -439,12 +452,16 @@
         <h3>Convert PDF</h3>
         <ul>
           <li><a href="/excel-to-pdf">Excel to PDF</a></li>
+          <li><a href="/extract-images">Extract Images from PDF</a></li>
+          <li><a href="/extract-text">Extract Text from PDF</a></li>
           <li><a href="/jpg-to-pdf">JPG to PDF</a></li>
           <li><a href="/merge-excel">Merge Excel</a></li>
           <li><a href="/pdf-to-excel">PDF to Excel</a></li>
           <li><a href="/pdf-to-jpg">PDF to JPG</a></li>
+          <li><a href="/pdf-to-markdown">PDF to Markdown</a></li>
           <li><a href="/pdf-to-powerpoint">PDF to PowerPoint</a></li>
           <li><a href="/pdf-to-word">PDF to Word</a></li>
+          <li><a href="/scan-to-pdf">Scan to PDF</a></li>
           <li><a href="/word-to-pdf">Word to PDF</a></li>
         </ul>
       </div>
@@ -456,6 +473,7 @@
           <li><a href="/crop-image">Crop Image</a></li>
           <li><a href="/invert-image-colors">Invert Image Colors</a></li>
           <li><a href="/resize-image">Resize Image</a></li>
+          <li><a href="/rotate-image">Rotate Image</a></li>
         </ul>
       </div>
     </nav>
@@ -593,6 +611,7 @@
 <script defer src="js/tools/pdf-page-tools-1.js?v=149"></script>
 <script defer src="js/tools/pdf-page-tools-2.js?v=149"></script>
 <script defer src="js/core/doc-export-builders.js?v=149"></script>
+<script defer src="js/tools/pdf-extra-tools.js?v=149"></script>
 <script defer src="js/core/xlsx-merge.js?v=149"></script>
 <script defer src="js/core/krutidev-to-unicode.js?v=149"></script>
 <script defer src="js/core/docx-reader.js?v=149"></script>

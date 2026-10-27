@@ -1066,6 +1066,35 @@ function buildBorderlessTable(run, pageWidth){
        reports per item, so a run's real color can later be found by
        proximity - getTextContent() has no color info of its own since
        PDF text color is graphics-state, not a text-content property. */
+/* Resolves one pdf.js image object id. pdf.js serves page-local ids
+   (img_*) from page.objs and shared/global ids (g_*) from
+   page.commonObjs; the promise form of get() throws for shared objects
+   that are not resolved yet, so the callback form is used on the store
+   the id prefix points at, with the other store as fallback. Without
+   this split, a logo XObject painted on every page resolves only on
+   the first page processed and is silently missing everywhere else
+   (verified against a two-page fixture: the shared image surfaced on
+   one page only). Same pattern as extraResolveImage in
+   pdf-extra-tools.js, kept local here so the converters do not depend
+   on the extra-tools script. */
+function docObjsStoreGet(store, objId, timeoutMs){
+  return new Promise((resolve)=>{
+    if(!store || typeof store.get !== "function"){ resolve(null); return; }
+    let done = false;
+    const timer = setTimeout(()=>{ if(!done){ done = true; resolve(null); } }, timeoutMs);
+    try{
+      store.get(objId, (img)=>{ if(!done){ done = true; clearTimeout(timer); resolve(img || null); } });
+    }catch(e){ if(!done){ done = true; clearTimeout(timer); resolve(null); } }
+  });
+}
+async function resolvePageImageObject(page, objId){
+  const isGlobal = String(objId || "").indexOf("g_") === 0;
+  const primary = isGlobal ? page.commonObjs : page.objs;
+  const secondary = isGlobal ? page.objs : page.commonObjs;
+  const first = await docObjsStoreGet(primary, objId, 2000);
+  if(first) return first;
+  return docObjsStoreGet(secondary, objId, 2000);
+}
 async function extractPageVisuals(pdoc, pageNum){
   const page = await pdoc.getPage(pageNum);
   const opList = await page.getOperatorList();
@@ -1182,7 +1211,7 @@ async function extractPageVisuals(pdoc, pageNum){
       const w = Math.hypot(m[0], m[1]), h = Math.hypot(m[2], m[3]);
       if(w < 8 || h < 8) continue; // skip tiny/decorative artifacts
       try{
-        const img = await page.objs.get(objId);
+        const img = await resolvePageImageObject(page, objId);
         if(img && (img.data || img.bitmap)) images.push({x:m[4], y:m[5], width:w, height:h, raw:img});
       }catch(e){ /* unresolved image object - skip it */ }
     }
@@ -1352,9 +1381,39 @@ function runsToXml(runs){
     return `<w:r>${rPrXml}<w:t xml:space="preserve">${escapeXml(fixed)}</w:t></w:r>`;
   }).join("");
 }
+/* Tags lone, short, fully-bold, large paragraphs as real Word headings
+   (headingLevel 1 or 2) so styledParagraphXml can emit a <w:pStyle>
+   and buildMixedDocx's styles.xml gives Word a Navigation Pane / TOC.
+   Detection is deliberately conservative: the paragraph must be short
+   (a wrapped body paragraph is never a heading), every text run bold,
+   and its size clearly above the page's own median paragraph size, so
+   ordinary bold lead-ins and body text are never promoted. Only
+   top-level paragraph blocks are tagged - table cells, columns and
+   list items keep their existing rendering. Returns the same array. */
+function tagHeadingParagraphs(pageBlocks){
+  if(!pageBlocks || !pageBlocks.length) return pageBlocks;
+  const paras = pageBlocks.filter(b=>b && b.type === "paragraph" && !b.listItem);
+  const sizes = paras.map(p=>Math.max(0, ...(p.runs || []).map(r=>Number(r.size) || 0))).filter(s=>s > 0).sort((a,b)=>a-b);
+  const median = sizes.length ? sizes[Math.floor(sizes.length / 2)] : 11;
+  paras.forEach(p=>{
+    const runs = (p.runs || []).filter(r=>r.text && r.text.trim() && !r.isBreak);
+    if(!runs.length || !runs.every(r=>r.bold)) return;
+    const text = runs.map(r=>r.text).join("").trim();
+    if(!text || text.length > 140) return;
+    const size = Math.max(...runs.map(r=>Number(r.size) || 0));
+    if(size >= 16 && size >= median * 1.35) p.headingLevel = 1;
+    else if(size >= 13 && size >= median * 1.18) p.headingLevel = 2;
+  });
+  return pageBlocks;
+}
 function styledParagraphXml(block){
   const runsXml = runsToXml(block.runs);
   const pPrParts = [];
+  // Real Word heading styles (set by tagHeadingParagraphs, below) so
+  // the Navigation Pane / table of contents in Word sees document
+  // structure instead of one flat run of large bold text. pStyle must
+  // be the FIRST child of pPr per the CT_PPr schema order.
+  if(block.headingLevel === 1 || block.headingLevel === 2) pPrParts.push(`<w:pStyle w:val="Heading${block.headingLevel}"/>`);
   if(block.listItem) pPrParts.push(`<w:ind w:left="720"/>`);
   if(block.align && block.align!=="left") pPrParts.push(`<w:jc w:val="${block.align}"/>`);
   // Both paragraph-to-paragraph spacing (before) and intra-paragraph
@@ -3128,6 +3187,7 @@ async function buildMixedDocx(blocks, pageSize, headerFooter){
 <Default Extension="xml" ContentType="application/xml"/>
 ${hasImages ? '<Default Extension="png" ContentType="image/png"/>' : ''}
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 ${headerRuns ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ''}
 ${footerRuns ? '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ''}
 </Types>`);
@@ -3192,6 +3252,20 @@ ${footerRuns ? '<Override PartName="/word/footer1.xml" ContentType="application/
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <w:body>${bodyParts}${sectPrXml(pageSize, headerRid, footerRid)}</w:body>
 </w:document>`);
+  // Word heading styles (Heading1/Heading2) referenced by
+  // styledParagraphXml's <w:pStyle> - without this part Word would
+  // treat the style references as unknown and drop the outline levels.
+  // Only the styles this builder can emit are defined; everything else
+  // keeps Word's own defaults. styles.xml needs a Content_Types
+  // Override (added above) but no relationship entry.
+  zip.folder("word").file("styles.xml",
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>
+<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:style>
+</w:styles>`);
   zip.folder("word").folder("_rels").file("document.xml.rels",
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relEntries.join("")}</Relationships>`);

@@ -47,7 +47,7 @@ const scriptOpenTags = (html) => html.match(/<script\b[^>]*>/gi) || [];
 describe("eligible route list", () => {
   it("AD_ROUTES is exactly the homepage plus every tool page", () => {
     expect([...AD_ROUTES].sort()).toEqual(["/", ...toolRoutes].sort());
-    expect(AD_ROUTES).toHaveLength(36);
+    expect(AD_ROUTES).toHaveLength(45);
   });
 
   it("config.path is those routes plus each tool's .html file, with no wildcard", () => {

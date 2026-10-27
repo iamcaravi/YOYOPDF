@@ -77,7 +77,7 @@ describe("AdSense loader placement (homepage + every tool page; never privacy/40
   const adFiles = ["index.html", ...tools.map((tool) => tool.file)];
 
   it("D. every AdSense-enabled page contains the Google-supplied tag exactly once, async and cross-origin", () => {
-    expect(adFiles.length).toBe(36);
+    expect(adFiles.length).toBe(45);
     for (const file of adFiles) {
       const html = read(file);
       expect((html.match(/adsbygoogle\.js/g) || []).length, file).toBe(1);

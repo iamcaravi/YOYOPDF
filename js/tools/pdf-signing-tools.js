@@ -123,6 +123,11 @@ TOOLS.sign = function(){
   }
   function placementStatusText(asset){
     if(asset.hiddenPages.has(activePage)) return t("toolSign.hiddenOnPage",{n:activePage});
+    // Visible on exactly one page: say which one, instead of the
+    // misleading "same position on every page".
+    if(numPages > 1 && asset.hiddenPages.size === numPages - 1){
+      for(let p=1;p<=numPages;p++) if(!asset.hiddenPages.has(p)) return t("toolSign.onlyOnPage",{n:p});
+    }
     if(asset.pageOverrides[activePage]) return t("toolSign.customPositionOnPage",{n:activePage});
     return t("toolSign.samePositionEveryPage");
   }
@@ -134,9 +139,9 @@ TOOLS.sign = function(){
     // Once selected, the viewport keydown handler below (nudge/resize/
     // delete) picks up from here.
     return `<div class="sig-list">` + assets.map(a=>`
-      <div class="sig-list-item ${a.id===selectedAssetId?"active":""}" data-asset-id="${a.id}" role="button" tabindex="0" aria-pressed="${a.id===selectedAssetId}" aria-label="${t("toolSign.signatureAlt")}, ${placementStatusText(a)}">
-        <img src="${a.pngDataUrl}" alt="${t("toolSign.signatureAlt")}" class="sig-list-thumb">
-        <span class="sig-list-meta">${placementStatusText(a)}</span>
+      <div class="sig-list-item ${a.id===selectedAssetId?"active":""}" data-asset-id="${a.id}" role="button" tabindex="0" aria-pressed="${a.id===selectedAssetId}" aria-label="${a.kind==="field" ? t("toolSign.fieldKindLabel",{label:a.fieldLabel}) : t("toolSign.signatureAlt")}, ${placementStatusText(a)}">
+        <img src="${a.pngDataUrl}" alt="${a.kind==="field" ? t("toolSign.fieldKindLabel",{label:a.fieldLabel}) : t("toolSign.signatureAlt")}" class="sig-list-thumb">
+        <span class="sig-list-meta">${a.kind==="field" ? t("toolSign.fieldKindLabel",{label:a.fieldLabel})+" · " : ""}${placementStatusText(a)}</span>
         <button type="button" class="sig-list-del" data-del-id="${a.id}" aria-label="${t("toolSign.deleteSignature")}">✕</button>
       </div>`).join("") + `</div>`;
   }
@@ -150,6 +155,7 @@ TOOLS.sign = function(){
       ${selected ? `
       <div class="sig-active-controls" id="sigActiveControls">
         <button class="btn secondary btn-sm" id="applyAllBtn" type="button" style="width:100%">${t("toolSign.applyToAllPages")}</button>
+        <button class="btn secondary btn-sm" id="thisPageOnlyBtn" type="button" style="width:100%;margin-top:6px">${t("toolSign.thisPageOnly")}</button>
         <button class="btn secondary btn-sm" id="toggleHideBtn" type="button" style="width:100%;margin-top:6px">${selected.hiddenPages.has(activePage) ? t("toolSign.showOnPage",{n:activePage}) : t("toolSign.hideOnPage",{n:activePage})}</button>
       </div>` : ``}
       <button class="btn" id="addSigBtn" type="button" style="margin-top:10px;width:100%">${t("toolSign.addSignature")}</button>
@@ -174,8 +180,20 @@ TOOLS.sign = function(){
         if(hasOtherPageOverrides(selected)) showApplyAllConfirm(selected);
         else applyToAllPages(selected);
       });
+      document.getElementById("thisPageOnlyBtn").addEventListener("click", ()=> thisPageOnly(selected));
       document.getElementById("toggleHideBtn").addEventListener("click", ()=> toggleHidden(selected));
     }
+  }
+  // One click to show an asset on the active page ONLY (hiding it on
+  // every other page) - previously that took one hide-click per page,
+  // which is what made "sign only this page" effectively undiscoverable.
+  function thisPageOnly(asset){
+    for(let p=1;p<=numPages;p++){
+      if(p===activePage) asset.hiddenPages.delete(p);
+      else asset.hiddenPages.add(p);
+    }
+    redrawAllPages();
+    showSigDefault();
   }
   function showApplyAllConfirm(asset){
     const controls = document.getElementById("sigActiveControls");
@@ -224,6 +242,14 @@ TOOLS.sign = function(){
           <strong>${t("toolSign.uploadSignature")}</strong><span>${t("toolSign.uploadSignatureDesc")}</span>
         </button>
       </div>
+      <div class="tool-content-area-label" style="margin-top:14px">${t("toolSign.addFieldLabel")}</div>
+      <div class="sig-method-list">
+        <button type="button" class="sig-method-btn" data-field-type="initials"><strong>${t("toolSign.fieldInitials")}</strong></button>
+        <button type="button" class="sig-method-btn" data-field-type="name"><strong>${t("toolSign.fieldName")}</strong></button>
+        <button type="button" class="sig-method-btn" data-field-type="date"><strong>${t("toolSign.fieldDate")}</strong></button>
+        <button type="button" class="sig-method-btn" data-field-type="text"><strong>${t("toolSign.fieldText")}</strong></button>
+        <button type="button" class="sig-method-btn" data-field-type="stamp"><strong>${t("toolSign.fieldStamp")}</strong></button>
+      </div>
       <button class="btn secondary" id="cancelAddSig" type="button" style="margin-top:10px;width:100%">${t("workspace.cancel")}</button>
     `;
     sigPanelArea.querySelectorAll("[data-method]").forEach(btn=>{
@@ -234,7 +260,80 @@ TOOLS.sign = function(){
         else showUploadMethod();
       });
     });
+    sigPanelArea.querySelectorAll("[data-field-type]").forEach(btn=>{
+      btn.addEventListener("click", ()=> showFieldForm(btn.dataset.fieldType));
+    });
     document.getElementById("cancelAddSig").addEventListener("click", showSigDefault);
+  }
+
+  // ---- Sidebar: simple placeable fields (initials / name / date /
+  // text / company stamp) ----
+  // Fields reuse the signature asset/placement/export model exactly:
+  // the value is rendered once to a PNG (the same canvas-to-PNG path
+  // the Type method already uses) and placed like any other asset.
+  // They are visually distinct in the sidebar list (labelled by kind)
+  // and on the page (stamps get a drawn border frame); the exported
+  // PDF still just carries the image, exactly like a signature - the
+  // legal note says so, and no certificate claim is ever made.
+  function fieldLabelFor(kind){
+    return kind==="initials" ? t("toolSign.fieldInitials")
+      : kind==="name" ? t("toolSign.fieldName")
+      : kind==="date" ? t("toolSign.fieldDate")
+      : kind==="stamp" ? t("toolSign.fieldStamp")
+      : t("toolSign.fieldText");
+  }
+  function showFieldForm(kind){
+    clearDrawEndHandler();
+    panelState = "field";
+    const isDate = kind==="date";
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+    sigPanelArea.innerHTML = `
+      <div class="tool-content-area-label">${t("toolSign.addFieldLabel")} — ${fieldLabelFor(kind)}</div>
+      <div class="field"><label for="fieldValueInput">${t("toolSign.fieldValueLabel")}</label>
+        ${isDate
+          ? `<input type="date" id="fieldValueInput" value="${todayIso}">`
+          : `<input type="text" id="fieldValueInput" placeholder="${t("toolSign.fieldValuePlaceholder")}" maxlength="60">`}
+      </div>
+      <div class="canvas-wrap"><canvas id="fieldPreview" width="260" height="100"></canvas></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn secondary" id="cancelField" type="button">${t("workspace.cancel")}</button>
+        <button class="btn" id="useField" type="button">${t("toolSign.useField")}</button>
+      </div>
+    `;
+    const input = document.getElementById("fieldValueInput");
+    const preview = document.getElementById("fieldPreview");
+    const pctx = preview.getContext("2d");
+    function draw(){
+      pctx.clearRect(0,0,preview.width,preview.height);
+      const text = input.value.trim();
+      if(kind==="stamp"){
+        pctx.strokeStyle = "#15181A"; pctx.lineWidth = 2;
+        pctx.beginPath();
+        if(pctx.roundRect) pctx.roundRect(6, 6, preview.width-12, preview.height-12, 8); else pctx.rect(6, 6, preview.width-12, preview.height-12);
+        pctx.stroke();
+        pctx.strokeStyle = "#15181A"; pctx.lineWidth = 1;
+        pctx.beginPath();
+        if(pctx.roundRect) pctx.roundRect(11, 11, preview.width-22, preview.height-22, 6); else pctx.rect(11, 11, preview.width-22, preview.height-22);
+        pctx.stroke();
+      }
+      if(!text) return;
+      pctx.fillStyle = "#15181A"; pctx.textAlign = "center"; pctx.textBaseline = "middle";
+      let size = 40;
+      pctx.font = `${size}px 'Plus Jakarta Sans', sans-serif`;
+      const maxW = preview.width - (kind==="stamp" ? 36 : 20);
+      while(pctx.measureText(text).width > maxW && size>14){ size-=2; pctx.font = `${size}px 'Plus Jakarta Sans', sans-serif`; }
+      pctx.fillText(text, preview.width/2, preview.height/2);
+    }
+    input.addEventListener("input", draw);
+    draw();
+    document.getElementById("cancelField").addEventListener("click", showSigDefault);
+    document.getElementById("useField").addEventListener("click", ()=>{
+      if(!input.value.trim()){ toast(t("toolSign.errTypeNameFirst")); return; }
+      const img = new Image();
+      img.onload = ()=> addSignature(img, {kind:"field", fieldType:kind, fieldLabel:fieldLabelFor(kind)});
+      img.src = preview.toDataURL("image/png");
+    });
   }
 
   // ---- Sidebar: draw method ----
@@ -399,7 +498,7 @@ TOOLS.sign = function(){
     c.getContext("2d").drawImage(img,0,0);
     return c.toDataURL("image/png");
   }
-  function addSignature(img){
+  function addSignature(img, opts={}){
     const meta = pagesMeta[activePage-1] || pagesMeta[0];
     if(!meta){ toast(t("toolSign.errPageNotReady")); return; }
     const pngDataUrl = toPngDataUrl(img);
@@ -421,7 +520,8 @@ TOOLS.sign = function(){
       wFrac: wPx/refW
     };
     const id = ++assetIdCounter;
-    assets.push({id, img, pngDataUrl, ratio, defaultPlacement, pageOverrides:{}, hiddenPages:new Set()});
+    assets.push({id, img, pngDataUrl, ratio, defaultPlacement, pageOverrides:{}, hiddenPages:new Set(),
+      kind: opts.kind || "signature", fieldType: opts.fieldType || null, fieldLabel: opts.fieldLabel || null});
     selectedAssetId = id;
     redrawAllPages();
     showSigDefault();
@@ -466,7 +566,7 @@ TOOLS.sign = function(){
       const r = placementRect(asset, meta, effectivePlacement(asset, meta.pageNum));
       const isSel = asset.id===selectedAssetId && meta.pageNum===activePage;
       const el = document.createElement("div");
-      el.className = "sign-sig" + (isSel ? " sign-sig-selected" : "");
+      el.className = "sign-sig" + (isSel ? " sign-sig-selected" : "") + (asset.kind==="field" ? " sign-sig-field" : "");
       el.dataset.assetId = String(asset.id);
       el.style.left = (r.x*100)+"%";
       el.style.top = (r.y*100)+"%";
@@ -983,6 +1083,14 @@ TOOLS.sign = function(){
     setStatus(t("workspace.done"), true);
     if(!operation.isCurrent()) return;
     out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:thumb, url, filename:outName}));
+    // The legal note travels with the download: a visual signature
+    // image is not a certificate-backed digital signature, and the
+    // result screen is where that distinction matters most.
+    const legalBox = document.createElement("div");
+    legalBox.className = "status";
+    legalBox.setAttribute("role", "note");
+    legalBox.textContent = t("toolSign.legalNote");
+    out.appendChild(legalBox);
   }));
 };
 
@@ -1043,6 +1151,10 @@ TOOLS.fillform = function(){
             <label style="font-size:.85rem;display:flex;gap:6px;align-items:center;margin-bottom:14px;"><input type="checkbox" id="flat"> ${t("toolFillform.flattenLabel")}</label>
             <button class="btn tool-toolbar-primary" id="go">${t("tools.fillform")}</button>
           </div>
+          <div id="fillformNoFields" style="display:none">
+            <p class="mode-info">${t("toolFillform.createFieldsHint")}</p>
+            <button class="btn secondary" type="button" data-open="edit" style="width:100%">${t("toolFillform.createFieldsBtn")}</button>
+          </div>
         </aside>
       </div>
       <div id="out"></div>
@@ -1089,6 +1201,7 @@ TOOLS.fillform = function(){
     canvasWrap.querySelectorAll(".fillform-field-overlay").forEach(el=>el.remove());
     actions.style.display = "none";
     pageField.style.display = "none";
+    document.getElementById("fillformNoFields").style.display = "none";
     showEmptyState();
   }
 
@@ -1105,24 +1218,38 @@ TOOLS.fillform = function(){
     pdfLibDoc.getForm().getFields().forEach(f=>{
       const isCheckbox = f instanceof PDFLib.PDFCheckBox;
       const isRadio = f instanceof PDFLib.PDFRadioGroup;
+      // Dropdowns, signature fields and buttons MUST be classified
+      // explicitly: previously every non-check/radio field fell through
+      // to "text", so a dropdown got a text overlay and export called
+      // getTextField() on it, which throws - swallowed by the export
+      // loop's catch, so the user's selection vanished with a "Done"
+      // status. pdf-lib wraps /Sig fields as PDFSignature (guarded:
+      // older bundles may not export it) and pushbuttons as PDFButton.
+      const isDropdown = f instanceof PDFLib.PDFDropdown;
+      const isSignature = typeof PDFLib.PDFSignature !== "undefined" && f instanceof PDFLib.PDFSignature;
+      const isButton = !isSignature && f instanceof PDFLib.PDFButton;
+      const type = isCheckbox ? "check" : isRadio ? "radio" : isDropdown ? "dropdown" : isSignature ? "signature" : isButton ? "button" : "text";
       // Radio option values (getOptions()) aren't individually tagged on
       // each widget by pdf-lib's public API - matching by index assumes
       // getWidgets() and getOptions() stay in the same append order,
       // which holds for every PDF this app itself can produce (Sign/
       // Fill are the only tools that create radio groups) and for
       // standard well-formed AcroForms generally.
-      const options = isRadio ? f.getOptions() : null;
+      const options = isRadio ? f.getOptions() : (isDropdown ? f.getOptions() : null);
       f.acroField.getWidgets().forEach((w, i)=>{
         const pageIndex = pageRefs.findIndex(r => r === w.P());
         if(pageIndex === -1) return;
         if(!byPage[pageIndex]) byPage[pageIndex] = [];
         byPage[pageIndex].push({
           name: f.getName(),
-          type: isCheckbox ? "check" : (isRadio ? "radio" : "text"),
+          type,
           rect: w.getRectangle(),
-          radioValue: isRadio ? (options[i] || "") : undefined
+          radioValue: isRadio ? (options[i] || "") : undefined,
+          options: isDropdown ? options : undefined,
+          multiline: type === "text" && typeof f.isMultiline === "function" ? f.isMultiline() : false,
+          isDate: type === "text" && /date/i.test(f.getName())
         });
-        fieldTypeByName[f.getName()] = isCheckbox ? "check" : (isRadio ? "radio" : "text");
+        fieldTypeByName[f.getName()] = type;
         count++;
       });
     });
@@ -1157,6 +1284,47 @@ TOOLS.fillform = function(){
         el.style.cssText = style+"margin:0;accent-color:var(--red);";
         el.checked = fieldValues[f.name] === f.radioValue;
         el.addEventListener("change", ()=>{ if(el.checked) fieldValues[f.name] = f.radioValue; });
+      } else if(f.type==="dropdown"){
+        // A real <select> populated with the field's own options: the
+        // previous text overlay could never hold a valid choice, and
+        // its value was discarded at export. An empty first option
+        // means "untouched" - choosing it again clears the stored
+        // value so an untouched dropdown stays untouched in the file.
+        el = document.createElement("select");
+        el.style.cssText = style+"box-sizing:border-box;padding:0 4px;";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "—";
+        el.appendChild(placeholder);
+        (f.options || []).forEach(opt=>{
+          const o = document.createElement("option");
+          o.value = opt; o.textContent = opt;
+          el.appendChild(o);
+        });
+        el.value = fieldValues[f.name] || "";
+        el.addEventListener("change", ()=>{
+          if(el.value) fieldValues[f.name] = el.value;
+          else delete fieldValues[f.name];
+        });
+      } else if(f.type==="signature" || f.type==="button"){
+        // Not fillable here, and never a text box: a signature field
+        // points at Sign PDF (a pasted text value would be meaningless
+        // and, worse, would look like a signature); a button field
+        // just gets a label so the overlay isn't a mystery box.
+        el = document.createElement("div");
+        el.style.cssText = style+"box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--ink-soft);border:1px dashed var(--ink-soft);background:rgba(255,255,255,.75);overflow:hidden;white-space:nowrap;";
+        el.textContent = f.type==="signature" ? t("toolFillform.signHereNote") : t("toolFillform.buttonFieldNote");
+      } else if(f.multiline){
+        el = document.createElement("textarea");
+        el.style.cssText = style+"box-sizing:border-box;padding:2px 4px;resize:none;";
+        el.value = fieldValues[f.name] || "";
+        el.addEventListener("input", ()=>{ fieldValues[f.name] = el.value; });
+      } else if(f.isDate){
+        el = document.createElement("input");
+        el.type = "date";
+        el.style.cssText = style+"box-sizing:border-box;padding:0 4px;";
+        el.value = fieldValues[f.name] || "";
+        el.addEventListener("input", ()=>{ fieldValues[f.name] = el.value; });
       } else {
         el = document.createElement("input");
         el.type = "text";
@@ -1241,6 +1409,10 @@ TOOLS.fillform = function(){
     actions.style.display = totalFieldCount>0 ? "block" : "none";
     if(totalFieldCount===0){
       readout.textContent = t("toolFillform.noFillableFields");
+      // Point at the tool that CAN create fields instead of leaving a
+      // dead end: the data-open delegation in panel.js navigates to
+      // Edit PDF, whose toolbar has the form-field picker.
+      document.getElementById("fillformNoFields").style.display = "block";
     }
   });
 
@@ -1251,7 +1423,10 @@ TOOLS.fillform = function(){
     // change/input listener), not the live DOM - only the current page's
     // overlay inputs exist in the DOM at any moment, so a multi-page form
     // filled across several pages would otherwise lose every page but
-    // the one visible at export time.
+    // the one visible at export time. A field that can't be written is
+    // reported by name afterwards - never swallowed, the way dropdown
+    // values used to vanish behind a "Done" status.
+    const writeErrors = [];
     Object.keys(fieldValues).forEach(name=>{
       const type = fieldTypeByName[name];
       const value = fieldValues[name];
@@ -1261,10 +1436,22 @@ TOOLS.fillform = function(){
           value ? cb.check() : cb.uncheck();
         } else if(type==="radio"){
           if(value) form.getRadioGroup(name).select(value);
+        } else if(type==="dropdown"){
+          const dd = form.getDropdown(name);
+          const options = dd.getOptions();
+          if(!options.includes(value)) throw new Error("not a valid option");
+          dd.select(value);
+        } else if(type==="signature" || type==="button"){
+          // Never written from here: signature fields are signed in
+          // Sign PDF, button fields have no fillable value. Skipped
+          // silently by design (they never appear in fieldValues from
+          // a user action - this branch is purely defensive).
         } else {
           form.getTextField(name).setText(value);
         }
-      }catch(e){}
+      }catch(e){
+        writeErrors.push(name);
+      }
     });
     if(document.getElementById("flat").checked) form.flatten();
     const outBytes = await doc.save();
@@ -1273,8 +1460,15 @@ TOOLS.fillform = function(){
     setStatus(T("workspace.statusPreparingDownload"));
     if(!operation.isCurrent()) return;
     const {url}=downloadBlob(blob,outName);
-    setStatus(t("workspace.done"), true);
+    setStatus(writeErrors.length ? t("toolFillform.doneWithErrors") : t("workspace.done"), true);
     if(!operation.isCurrent()) return;
     out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, url, filename:outName}));
+    if(writeErrors.length){
+      const errBox = document.createElement("div");
+      errBox.className = "status";
+      errBox.style.color = "var(--rose)";
+      errBox.textContent = t("toolFillform.writeErrors", {names: writeErrors.join(", ")});
+      out.appendChild(errBox);
+    }
   }));
 };

@@ -35,6 +35,15 @@
 /unlock-pdf  /unlock-pdf.html  200
 /repair-pdf  /repair-pdf.html  200
 /pdf-to-powerpoint  /pdf-to-powerpoint.html  200
+/extract-images  /extract-images.html  200
+/pdf-counter  /pdf-counter.html  200
+/extract-text  /extract-text.html  200
+/edit-pdf-metadata  /edit-pdf-metadata.html  200
+/pdf-to-markdown  /pdf-to-markdown.html  200
+/resize-page-size  /resize-page-size.html  200
+/compare-pdf  /compare-pdf.html  200
+/scan-to-pdf  /scan-to-pdf.html  200
+/rotate-image  /rotate-image.html  200
 /privacy-policy  /privacy-policy.html  200
 
 # Unknown routes must return a real 404 instead of a soft-200 copy of the homepage.

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Plain synchronous <script src> tags (no defer/async - order and
+     timing must stay exactly as before), not inline <script> blocks:
+     production's Content-Security-Policy (_headers) sets script-src
+     'self' https://cdnjs.cloudflare.com with no 'unsafe-inline' and no
+     nonce/hash, which silently blocks inline <script> execution. That
+     never showed up locally (local dev servers send no CSP header at
+     all), but in production it meant data-theme was never set before
+     first paint (a real light/dark flash) and the tool-preload hide-
+     until-ready script never ran either. See each file's own header
+     comment for the full explanation. -->
+<script src="js/core/pretheme.js"></script>
+<script src="js/core/prelanguage.js"></script>
+<script src="js/core/tool-preload.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF to Markdown Converter Free Online | YOYOPDF</title>
+<meta name="description" content="Convert a PDF into Markdown with headings, tables and lists preserved, free and browser-based. No upload, no AI, no sign-up.">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<link rel="canonical" href="https://yoyopdf.com/pdf-to-markdown">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://yoyopdf.com/pdf-to-markdown">
+<meta property="og:site_name" content="YOYOPDF">
+<meta property="og:title" content="PDF to Markdown Converter Free Online | YOYOPDF">
+<meta property="og:description" content="Convert a PDF into Markdown with headings, tables and lists preserved, free and browser-based. No upload, no AI, no sign-up.">
+<meta property="og:image" content="https://yoyopdf.com/assets/og/yoyopdf-default-og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_IN">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="PDF to Markdown Converter Free Online | YOYOPDF">
+<meta name="twitter:description" content="Convert a PDF into Markdown with headings, tables and lists preserved, free and browser-based. No upload, no AI, no sign-up.">
+<meta name="twitter:image" content="https://yoyopdf.com/assets/og/yoyopdf-default-og.png">
+
+<meta name="theme-color" content="#050505">
+<link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/yoyopdf-logo.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "PDF to Markdown",
+  "url": "https://yoyopdf.com/pdf-to-markdown",
+  "description": "Convert a PDF into Markdown with headings, tables and lists preserved, free and browser-based. No upload, no AI, no sign-up.",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript and a modern web browser",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://yoyopdf.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "PDF to Markdown",
+      "item": "https://yoyopdf.com/pdf-to-markdown"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is my PDF uploaded to convert it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. The same block extraction behind PDF to Word runs locally in your browser — nothing leaves your device."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Are tables preserved?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, as GitHub-style pipe tables, including spanned cells. Very complex multi-column layouts are flattened in reading order and may need a quick tidy-up."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What happens to images in the PDF?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Images are not embedded in the Markdown file. Scanned, image-only pages produce no text — this site has no OCR."
+      }
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "How to use PDF to Markdown",
+  "step": [
+    {
+      "@type": "HowToStep",
+      "position": 1,
+      "name": "Upload",
+      "text": "Add the PDF. It is analysed locally in your browser."
+    },
+    {
+      "@type": "HowToStep",
+      "position": 2,
+      "name": "Structure",
+      "text": "Headings are inferred from size and weight, tables from ruling lines and column geometry, lists from their markers."
+    },
+    {
+      "@type": "HowToStep",
+      "position": 3,
+      "name": "Download",
+      "text": "Get a .md file, or copy the Markdown from the preview."
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- The Phase 11 runtime manifest keeps document libraries eager on the
+     homepage/PDF routes and omits them from image-only routes. The same
+     pinned/SRI-protected URLs remain available through ensurePDFLib() and
+     ensurePDFJS() for a shared-shell action that requests them later. -->
+<!-- integrity/crossorigin hashes below are SHA-384 of each pinned
+     version's actual file content (verified against cdnjs's own
+     published SRI metadata at api.cdnjs.com/libraries/<pkg>/<ver>) - a
+     compromised or MITM'd CDN response for any of these would now fail
+     to execute instead of running with full page privileges against the
+     user's actual files. Pinning a version without this still trusted
+     the CDN completely; this is the actual point of pinning one. -->
+<!-- defer (not async): these must still execute in this exact relative
+     order before js/app.js's own scripts run (see the RUNTIME_SCRIPTS
+     load-order comment below) - defer preserves that guarantee while
+     letting the browser fetch all of them IN PARALLEL and continue
+     parsing the rest of <head>/<body> (including discovering the
+     stylesheet and painting the page) instead of blocking on each one
+     sequentially. This was a real, measured root cause of the tool-
+     opening flash: with plain blocking <script src> tags here, the
+     parser - and therefore first paint AND every later local script's
+     own fetch - couldn't even begin until all four of these had
+     downloaded and run, one after another. -->
+<!-- RUNTIME_LIBRARIES_START -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" crossorigin="anonymous"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt" crossorigin="anonymous"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" integrity="sha384-Z3REaz79l2IaAZqJsSABtTbhjgOUYyV3p90XNnAPCSHg3EMTz1fouunq9WZRtj3d" crossorigin="anonymous"></script>
+<!-- RUNTIME_LIBRARIES_END -->
+<!-- ADSENSE_LOADER_START -->
+<!-- Google AdSense loader, generated from build/adsense-config.js for the homepage and every tool page
+     (never privacy-policy.html or 404.html). No ad units/containers exist yet. Google-managed script, so no
+     SRI. It executes only under the nonce-based CSP that netlify/edge-functions/csp-nonce.js sets for these
+     pages; the strict static policy in _headers blocks it (fail closed). -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6665490745490381"
+     crossorigin="anonymous"></script>
+<!-- ADSENSE_LOADER_END -->
+<!-- jszip/mammoth/xlsx are each only needed by a handful of specific
+     tools (Split/Extract Pages, PDF to Word, PDF<->Excel)
+     - loaded on demand via ensureJSZip()/ensureMammoth()/ensureXLSX()
+     instead of on every single page load regardless of which tool (if
+     any) the visitor actually uses. Plain synchronous <script src>, not
+     an inline block, for the same CSP reason as the pre-paint scripts
+     above (see js/core/lazy-loaders.js's own header comment) - kept in
+     this exact position so load order/timing are unchanged. -->
+<script src="js/core/lazy-loaders.js"></script>
+<link rel="stylesheet" href="css/site.css?v=72">
+</head>
+<body>
+
+<a href="#tools" class="skip-link">Skip to tools</a>
+<header>
+  <a href="/" class="brand" aria-label="YOYOPDF home">
+    <img class="brand-logo brand-logo-dark" src="assets/icons/yoyopdf-logo-dark-theme.png?v=1" alt="YOYOPDF logo">
+    <img class="brand-logo brand-logo-light" src="assets/icons/blue.png?v=1" alt="YOYOPDF logo">
+  </a>
+  <nav class="topnav">
+    <button class="nav-tool" data-open="merge" data-i18n="nav.merge">Merge PDF</button>
+    <button class="nav-tool" data-open="split" data-i18n="nav.split">Split PDF</button>
+    <button class="nav-tool" data-open="compress" data-i18n="nav.compress">Compress PDF</button>
+    <div class="nav-dropdown">
+      <button class="nav-dd-trigger" aria-haspopup="true" aria-expanded="false"><span data-i18n="nav.convert">Convert PDF</span> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+      <div class="nav-dd-menu" id="convertMenu" role="menu"></div>
+    </div>
+    <div class="nav-dropdown mega-dropdown">
+      <button class="nav-dd-trigger" aria-haspopup="true" aria-expanded="false"><span data-i18n="nav.allTools">All PDF Tools</span> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+      <div class="nav-dd-menu mega" id="megaMenu" role="menu"></div>
+    </div>
+    <div class="nav-search" id="navSearch">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="navSearchInput" data-i18n-placeholder="nav.search" data-i18n-aria-label="nav.search" placeholder="Search tools…" autocomplete="off" aria-label="Search all PDF tools">
+      <div class="nav-search-results" id="navSearchResults"></div>
+    </div>
+  </nav>
+  <div class="nav-actions">
+    <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark / light theme">🌙</button>
+    <div id="langSelectDesktop" class="lang-select-mount"></div>
+    <button class="nav-tool nav-contact-btn" data-open="contact"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H7l-3 3V4z"/></svg><span data-i18n="nav.contact">Contact Us</span></button>
+    <button class="nav-tool btn-donate-nav" data-open="donate">♥ <span data-i18n="nav.donate">Donate</span></button>
+    <button class="hamburger" id="hamburgerBtn" aria-label="Open menu">☰</button>
+  </div>
+</header>
+
+<div class="mobile-menu" id="mobileMenu">
+  <div class="mobile-search" id="mobileSearch">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input type="text" id="mobileSearchInput" data-i18n-placeholder="nav.search" data-i18n-aria-label="nav.search" placeholder="Search tools…" autocomplete="off" aria-label="Search all PDF tools">
+  </div>
+  <div class="mobile-search-results" id="mobileSearchResults"></div>
+  <div id="langSelectMobile" class="lang-select-mount lang-select-mount-mobile"></div>
+  <button data-open="merge" data-i18n="nav.merge">Merge PDF</button>
+  <button data-open="split" data-i18n="nav.split">Split PDF</button>
+  <button data-open="compress" data-i18n="nav.compress">Compress PDF</button>
+  <div class="divider"></div>
+  <button data-open="pdf2word" data-i18n="tools.pdf2word">PDF to Word</button>
+  <button data-open="word2pdf" data-i18n="tools.word2pdf">Word to PDF</button>
+  <button data-open="pdf2excel" data-i18n="tools.pdf2excel">PDF to Excel</button>
+  <button data-open="excel2pdf" data-i18n="tools.excel2pdf">Excel to PDF</button>
+  <button data-open="pdf2jpg" data-i18n="tools.pdf2jpg">PDF to JPG</button>
+  <button data-open="jpg2pdf" data-i18n="tools.jpg2pdf">JPG to PDF</button>
+  <div class="divider"></div>
+  <button type="button" class="mm-alltools-toggle" id="mobileAllToolsToggle" aria-expanded="false" aria-controls="mobileMega">
+    <span data-i18n="nav.allTools">All PDF Tools</span>
+    <svg class="mm-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+  </button>
+  <div class="mobile-mega" id="mobileMega"></div>
+  <div class="divider"></div>
+  <button data-open="contact" data-i18n="nav.contact">Contact Us</button>
+  <div class="divider"></div>
+
+  <button class="btn-donate-nav" data-open="donate" data-i18n="nav.donate" style="text-align:center;">Donate</button>
+</div>
+
+<main id="main-content">
+<section class="hero-v2">
+  <div class="hero-copy">
+    <span class="hero-badge" data-i18n="hero.badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>100% Free &bull; No Sign Up</span>
+    <h1>PDF to Markdown</h1>
+    <p class="tagline">Turn a PDF into clean Markdown — headings, tables and lists intact — for docs, notes and wikis, without uploading it.</p>
+    <div class="hero-cta">
+      <button class="btn-cta-primary" id="heroChoosePdfBtn" type="button" data-open="edit">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span data-i18n="tools.edit">Edit PDF</span>
+      </button>
+      <button class="btn-cta-secondary" id="heroAllToolsBtn" type="button">
+        <span data-i18n="hero.exploreAllTools">Explore All Tools</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="hero-art">
+    <div class="hero-upload-glow" aria-hidden="true"></div>
+    <div class="hero-upload-particles" aria-hidden="true"></div>
+    <div class="hero-upload-device" id="heroUploadDevice">
+      <div class="hero-upload-reflection" aria-hidden="true"></div>
+      <div class="laptop-screen">
+        <div class="laptop-screen-brand" aria-hidden="true">
+          <img class="brand-logo brand-logo-sm brand-logo-dark" src="assets/icons/yoyopdf-logo-dark-theme.png?v=1" alt="">
+          <img class="brand-logo brand-logo-sm brand-logo-light" src="assets/icons/blue.png?v=1" alt="">
+        </div>
+        <div class="mock-dropzone" id="heroDropzone" role="button" tabindex="0" data-i18n-aria-label="hero.dropAriaLabel" aria-label="Drop a PDF here, or activate to choose a file">
+          <div class="mock-dz-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>
+          <div class="mock-dz-title" id="heroDzTitle" data-i18n="hero.dropHere">Drop your PDF here</div>
+          <div class="mock-dz-or" id="heroDzOr" data-i18n="hero.or">or</div>
+          <span class="mock-choose-btn" id="heroMockChooseBtn" aria-hidden="true" data-i18n="hero.chooseFile">Choose File</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="heroFileInput" class="hidden" accept="application/pdf">
+</section>
+
+<section class="tools-section" id="tools">
+
+  <div class="section-head">
+    <h2 data-i18n="home.popularToolsTitle">Popular PDF Tools</h2>
+    <p data-i18n="home.toolsSectionDesc">YOYOPDF provides browser-based tools for common PDF and image tasks. Fast, easy and free.</p>
+  </div>
+  <div id="toolCategories"></div>
+</section>
+
+<section class="trust-strip">
+  <div class="trust-strip-inner">
+    <div class="trust-item"><span class="trust-ico">🌐</span><span data-i18n="home.trustBrowserBased">Browser Based</span></div>
+    <div class="trust-item"><span class="trust-ico">🔒</span><span data-i18n="home.trustLocalProcessing">Local Processing</span></div>
+    <div class="trust-item"><span class="trust-ico">🛡️</span><span data-i18n="home.trustNoFileUpload">No File Upload</span></div>
+    <div class="trust-item"><span class="trust-ico">🔓</span><span data-i18n="home.trustNoSignup">No Sign-Up</span></div>
+    <div class="trust-item"><span class="trust-ico">💯</span><span data-i18n="home.trustFree">Free</span></div>
+    <!-- Filled by js/core/ratings.js's mountTrustStripRating() with the
+         real, live overall tool rating (never hardcoded) - see that
+         function's own comment for why this is a 6th .trust-item, not a
+         separate banner. Starts empty so it's harmless if that script is
+         ever removed. -->
+    <div class="trust-item" id="trustStripRating"></div>
+  </div>
+</section>
+
+<section class="features-section">
+  <div class="section-head">
+    <h2 data-i18n="home.featuresTitle">Powerful Tools to Work with PDFs</h2>
+    <p data-i18n="home.toolsSectionDesc">YOYOPDF provides browser-based tools for common PDF and image tasks. Fast, easy and free.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <h3 data-i18n="home.feature1Title">Local by Design</h3>
+      <p data-i18n="home.feature1Desc">Document contents stay on your device while tools process them in the browser; YOYOPDF does not upload your files.</p>
+    </div>
+    <div class="feature-card">
+      <div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7v8l10-12h-7z"/></svg></div>
+      <h3 data-i18n="home.feature2Title">Blazing Fast</h3>
+      <p data-i18n="home.feature2Desc">Our tools are optimized for speed to save your time and increase productivity.</p>
+    </div>
+    <div class="feature-card">
+      <div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg></div>
+      <h3 data-i18n="home.feature3Title">Works Across Devices</h3>
+      <p data-i18n="home.feature3Desc">Use YOYOPDF in a modern desktop, tablet or mobile browser. No installation required.</p>
+    </div>
+    <div class="feature-card">
+      <div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-9.5-9C.5 8 2 4 6 4c2 0 3.5 1.2 4 2 .5-.8 2-2 4-2 4 0 5.5 4 3.5 8-2.5 4.65-9.5 9-9.5 9z"/></svg></div>
+      <h3 data-i18n="home.feature4Title">Always Free</h3>
+      <p data-i18n="home.feature4Desc">All tools are completely free to use. No hidden charges, no sign up needed.</p>
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="cta-card">
+    <div class="cta-copy">
+      <h2 id="ctaSectionTitle">Everything You Need. <span class="accent">All in One Place.</span></h2>
+      <p data-i18n="home.ctaDesc">Use YOYOPDF for common PDF and image tasks while keeping document processing on your own device.</p>
+    </div>
+    <div class="cta-art" aria-hidden="true">
+      <svg viewBox="0 0 220 160" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="34" cy="26" r="3" fill="var(--ochre)" opacity="0.5"/>
+        <circle cx="190" cy="138" r="2.5" fill="var(--ochre)" opacity="0.4"/>
+        <circle cx="18" cy="128" r="2" fill="var(--ochre)" opacity="0.35"/>
+        <rect x="10" y="14" width="80" height="104" rx="8" fill="#fff" stroke="var(--line)" stroke-width="2"/>
+        <rect x="130" y="14" width="80" height="104" rx="8" fill="#fff" stroke="var(--line)" stroke-width="2"/>
+        <rect x="66" y="4" width="88" height="132" rx="10" fill="#fff" stroke="var(--line)" stroke-width="2"/>
+        <rect x="82" y="22" width="56" height="8" rx="4" fill="var(--ochre)"/>
+        <rect x="82" y="38" width="56" height="6" rx="3" fill="var(--line)"/>
+        <rect x="82" y="50" width="40" height="6" rx="3" fill="var(--line)"/>
+        <circle cx="128" cy="112" r="16" fill="var(--ochre)"/>
+        <path d="M121 112l5 5 9-10" stroke="var(--btn-ink)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section class="support-section visually-hidden" id="donate" aria-hidden="true">
+  <div class="support-card">
+    <div class="support-left">
+      <h2><span aria-hidden="true">❤️</span> <span data-i18n="home.supportTitle">Support YOYOPDF</span></h2>
+
+      <p data-i18n="home.supportP1">A free, browser-based PDF toolkit. Every file is processed locally on your device.</p>
+      <p data-i18n="home.supportP2">No file uploads. Your files stay in your browser.</p>
+      <p data-i18n="home.supportP3">If YOYOPDF saves you time, please consider supporting development with any small UPI donation.</p>
+      <div class="support-badges">
+        <span class="support-badge"><span aria-hidden="true">⚡</span> <span data-i18n="home.trustBrowserBased">Browser Based</span></span>
+        <span class="support-badge"><span aria-hidden="true">🔒</span> <span data-i18n="home.supportPrivate">Private</span></span>
+        <span class="support-badge"><span aria-hidden="true">💯</span> <span data-i18n="home.trustFree">Free</span></span>
+        <span class="support-badge"><span aria-hidden="true">❤️</span> <span data-i18n="home.supportMadeWithLove">Made with love in India</span></span>
+      </div>
+    </div>
+    <div class="support-right">
+      <div class="donate-qr-wrap">
+        <img src="data:image/jpeg;base64,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MMIAAAUAAEIUAAAAAoAMAAAAAAAAAEIEMMMMMAAAAAoAUAAUAAAAAAAUUAAAAAoAAAoUUAoAAAAAAAAAUAAAAAAAAAAoEAAoUAAAUUAAAAAAUAAAAAAoUAAoAAAAAAAAAUAoUUAAAAAAoUAAQwAAgQQAAAEAAUUwIAAAAUAAoAAAAQAAw0EwoQgAAAAAAgQMMIAEMIEMAAEQAEcQMgAAAAQMMgAAAAEMAMcQMgEEMAAAAAAUAAoAAAAUAAAAAAAAUAAAAAAAAAAUAAAUUAAAAAoAUAAAAAAAAAAoUAAAAAAAAUAAAAAAAAAoUAAAAUAAAAAAUUAAUUAAAAAAoAAAAUAwwwgAAEEwAQUAAAAwgAgAY0QAAAAwAQ0AIQgAAAAAAgAAAAQIAEIAAAUQMIEYAAAAAAAAAoUAAAAIAAEYAsIAAAAAAAAQcAAUUAEMAAAAQAEMIAAAAAAAAAgQMMIUYAAAUAsMEAAAAAAAAAAAAUAAAAAAAAAAAUAAAAAoAAAAUAAAAAAAAUAAUUAAAAAAoAEAoAUAgQAAAAAAAQQAoAAAoAAAAUAAAQQAAAQAIUUAAAAAAoAUAoAQAAAAAAAAAAAAAoAAAoEEAAQEAAAAAAAAAgQUAAAAAAoUAAoUAAAUAAAAAAAUUAoAAAAUAAAAAAAAUAAAAAoAUAAAAAAoAkAoUAAQgAAAAAAAQUwAAAAoQAAAAAAAEAwAUwwoEUAAAAAAoEwAYwAAwwwwgAAAAAUAAAAAAUQAAAQAAUUwAAwwAAgAAAAAAoUEAsMAAMIAAAAEMIAUAAAAAIUMAAAAAAQcMMMIAAEMMAAAAAoUAAoUAAAAAAAAUAAAAAAAAAoUUAoAAAAAAAAAUAAUAAAAAAAoAwwoQAAAUwwAUkAwwEwwwwA40QAgUAAQwAAAAQA4gAAAAAAAQwwAAUAAAQwwAAkAgAAAAAAAoUQAAAAAAAAAAEEAw0EAAAAAAAAEAAQIAIAAMMMYAIAAAAAAMgUEAAAAAAAMAEYUAAUUAAAAAAAAAAoAAAAAAAAAAAAAAAoAAAoAAAoAAAAAUAAAUAAUUAAAAAAoAUAAUUAAAUAAAUAAAAAAAAAoAAAoAUAAAAAAAAAoAUAAAAAAQwwAAAwAwwwAgAgAw0kAAAAAAUAAoEwAgAwwwkUwAAQwAAAAAEMMMMMMMMIEAAAIAAQYMMIAAIUAMgUEAAAAMIUUAAEIAAAAAAoAAAAAAAAAAAAAUAAAUAAAAAoAAAoAAAAAAAAUUAAUUAAAAAAoEAAAAAAAAAAAAAAAAAAoAAAAUAAoAUAAAAAAUAAoAUAAAAAAoUAAAAEAAAAAw0AAw0AAYwwAYkAAAEwAAQAAAQAAoEAAAAAAAoUAAAAUAAAAAAUAAMcAAkIAAsYAAAQMMIEAAAAAAoUAAAAAAAoUAAAAUAAAAAAUUAAAQAAAAAoUAAoAMMMMAAAUEMoQEMIAAAAoUAAAAUAAAAAAUAAAAAAAAAAAUAAoUAAAUAAAUUAoAUAAAAAAoUAwwwwAAAAAAUAAwkUwIQwAAUAAoUAAgQwwAQUAwwgAAAAAAoQMMMMMMIAAAAUAAMcUAoAAAAQIAgQIAAEIAIAQMAAEMAAAAAkMMMMMMMMIAMAUYAMMYAAAAMoQcAAQcAMMcAAAUMgAUMAAAAAAAAIEIMAMAAAAAAAAAAAAAAIAAEAIAAAAAAAAAAAAAAAAAA//xAAC/9oADAMBAAIAAwAAABDzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzwQwwwwwwwwywxTzzzzgwxSwwxzywxzwwxTywwwwwwwwwxzzzzxSjzzzzzxTzzxTygwwzzxTzzzyxzzyzzyQzzxTzzzzyjzzzzzxSjzzzzzxTzzxzyzzTjzxTzzzzzzzTzzxzzzxTzzzzyjzzzzzxSjzzzyjxTzzzzzzxTyjzzzzzzzzzzzzxTzzxSjzzzyjzzzzzxSjzzzyjxTzzzzxzxTwzzzzzzzzjzzyzxTzzxSjzzzyjzzzzzxSjzzzyjxTzzxTzzxTzzzzzzzzzzzywjxzzzxSjzzzyjzzzzzxSjzzzyjxTzzxzzzxTzzzzzzzTzzzTyjzzzzxSzzzzyjzzzzzxSjzzzzzxTzzzzzzzzyjxTzzzzzzzzyjzzzzxTzzzzyjzzzzzxTzzzzzzzzzzxSjzxTyjxTzzxSjzzzyjxTzzzzzzzzzzzzzzzzzzzzzzzzzzzzyjzzTyjzzzzzyzzxyzzxzzzzzzzzzzzzzzzzzTzzzzzzzzzzzyjjxTyzzTzzzzzzzzzzzzzzzzzzzzzzzzzzzxTyjzzzzzzzzzyjzxTzzzzzzzzyjxTzzzzzzxTyjzzzzzzzzzxSjzxSjzzyijzzzzzyjzzzzzxSjzxTzzxTzzxTyjxSjzzzzzzxSjzzyzzzTxzzzyzzyjzxzzzzyjzxTzzxzzzzSizxzzzzzzzzxCTzzTzzxjTjzzzDzyzTzTjDzyjzxzzTzDTzByjzzjTzzzzzzzzzzzzzzxSjzzzzzxTyjzzzzzzzzzyjzxSijxTzzxTyjzzzzzzzzzxSjzzzzzxTyjxTzzzzzzzzzzzzyjzzzzxSjzzyjzzzzzzxTzzzyjzzzzzxSizxTyjzzzzxyzzxzzzxTzzxTyjxTzzzzzzzxDDjDCTzzzzjByjTxTijzzjDzzzzzzzzxTzzxTizBTzzzzzzzzzyTzzyjxDDzzzyjzjDDzzzzzTzzzTjDBSyTxTzzzDTzzzzzzzzzzzzyjzzzzxTzzxTyjzzzzzzzzzyjzxTzzxTzzzyjzzzzzzzTzjxTyjxTzzxSzzzTyzzzzzzzzzzyjzzyyzzzyzxSjzzzzzzxTizxTizxTzzxzzzxzzzzzzzzzjzzyjjzzzzzzjzxyzzzzzzzxSjzxSjzxSjzzzzzzyjzzzzzzyjzzzzzzzyjxTzzzzzzzzzzzxSxjxSjzyxzzxSzzzyzgxzzzzzzzzzzzxTjwzTgwxTjzzzzzzxSjwzzzzxTzzyQzzyQyjzywzywjwwwxzxSijxzzzxzzzzzzzzxSjzzTzzxzzzxTzzxzyzzzzzzyjzzzzzxSyDzzzjzzzzzzzzzxSjzxSjzzzzzxTyjxTzzzzzzzzyjxTzzxTzzzzzzzyjzzzzzzxSwwzzzzxTgwzTgzwQzgwwwzyQizxyzzywyzzzzzwxzzxzzzzzzyzywjzwxzzxzzgzzxzzzzzxSjwwwzzzzzzzzhzxzhzzzzzzzzzzzyzjzTzzzzyjzTzzzTzzxSjzzzzzzzzzzyjzzyjzzzzzzzzzzxTzzxTzzzzzzxTzzzzzzzzzzxTzzzzyjxTzzzyjzzzzzzxTyjzzyjxTyjxTzzxTzzzzzzzzzzxTyjxTzzzzzzxTyjzzzzzzzzzzyzzxzyzxyzzxyhzzzzzxzjzxSizxyzzzyjzxzyzzzzzzzTzzzzzzzzzzzTzjzyzDzzzzzyjzxSjzzTzzzSjzzzzjzzzzzxTzzzzzzzzzzxTzzzzyjzzzzzzzzzzzzxTzzxSjzzyjzzzzzzxSjzzzzzxTzzzzzzxTzzzzzzzyjzxTyjxTzzzyjzxTyjzzzzzxSjzzz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fsTbbBd023cjFZ02/Ym26um22m3/AMB5023Ym37HTb9XTb9ibbYLum27kYrOm37E23V022y1IG8KUO7+ef2A0duR+3zvPPPPPPPPPESxv4Qo+rF2+T5C9C2mAb06iQFIF/PP75OOTlpm36um37E22wXdNt3IxWdNv2Jturptv8V3neTbdibfq6bfsTbbBd023cjFZ02/Ym26um2/xXed5Nt2Jt+rpt+xNtsF3TbdyMVnFBIRjlATYzZs2bNmzZAvpFTXU6bbYBgQI8Ktm759+TgCOvKk7Hn7OAA68qDpzZs2YkhghJkeguTbRJgEAFjsZsz58+fPifyrECoAObmhMUrMg7S+fPnxP5ViBUAHOnybbsTb9XCBxUEVJdhmzZs2bNmNuSUDygJYLum27kYvgd02202/4PA+h0ZV4q8m27E2/wCDgu6bbuRi+B3TbbTb/g8D6HRlXirybbsTb/g4Lum2/ZGm22m36um37HnTbbB8Do0Z6bfsKvJturpttpt/xzbfsjTbbTb9XTb9jzpttg3nRoxWdNv2FXk23V02202/45tuyDfQyZAQEOgfjfPnz58+fPnz58+fPnz58+IYFCHCpYshaCEeFSu+fMGBRPflQLzb7EIc0c8nZL5syP2zjql4+fEMChDhUsWC7ibQLEghAONjNmfPn2bMv27PsNc+fHUck8cva02+5zsMQJUgXF82YGLgjng6LYf5IiHKKXzZvxcAB14Qm822yFoIR4VL43z58+fPnz58+fPnz58+fPiGBQhwqWP4SbftcHwOVTb96bb/ADM2/a4Pgcqm370237hLYJAkISLjS+fPnwj9KlUQ1DQmKVmQdsPnz58+fPkLQAhwq2xNvsHFyTzydlvmzf7GYdUvnz5C0AIcKtbLyocTgu/xfNmGthmBKkgw21RoTFKzIOs+H/jmScvLlfNmBtAkyCEiw25tun8TAE9eEIu+fIWgBDhVrHccEZjD0TbfPnz58+fPnz5C0AIcKtvRptu95Nt2Jt+x50234lSrybbvRptux022wbbptu9Gm273k23Ym37HnTbfiVKvJtu9Gm27HTbbBtum2/ZGejPTb7Tbd6bf/ERno3dNtsGp0abf8PkYth0Yth02+023em3/AARi+h0bum22DU6NNv8Ah8jFpcDfQyZAQEOgbvnx1HJPHL20/iwAHrypF82Yf+eJJw8O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" alt="Donate QR code">
+      </div>
+      <span class="support-caption" data-i18n="home.scanUpi">Scan using any UPI App</span>
+      <div class="upi-logos">
+        <span class="upi-badge"><span class="dot" style="background:#4285F4"></span>Google Pay</span>
+        <span class="upi-badge"><span class="dot" style="background:#5F259F"></span>PhonePe</span>
+        <span class="upi-badge"><span class="dot" style="background:#00BAF2"></span>Paytm</span>
+        <span class="upi-badge"><span class="dot" style="background:var(--brand-grad)"></span>BHIM UPI</span>
+      </div>
+      <p class="support-caption">Any contribution helps keep YOYOPDF free ❤️</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- SEO_TOOL_DIRECTORY_START -->
+<section class="seo-tool-directory" aria-labelledby="seo-tool-directory-title">
+  <div class="seo-tool-directory-inner">
+    <div class="seo-tool-directory-head">
+      <h2 id="seo-tool-directory-title" data-i18n="home.exploreYoyopdfTools">Explore YOYOPDF Tools</h2>
+      <a class="seo-tool-directory-viewall" href="#tools" data-i18n="home.viewAllToolsArrow">View all tools &rarr;</a>
+    </div>
+    <nav class="seo-tool-directory-groups" aria-label="All YOYOPDF tools">
+      <div class="seo-tool-directory-group">
+        <h3>Organize PDF</h3>
+        <ul>
+          <li><a href="/add-blank-page">Add Blank Page</a></li>
+          <li><a href="/delete-pages">Delete Pages</a></li>
+          <li><a href="/extract-pages">Extract Pages</a></li>
+          <li><a href="/merge-pdf">Merge PDF</a></li>
+          <li><a href="/organize-pdf">Organize PDF</a></li>
+          <li><a href="/reorder-pages">Reorder Pages</a></li>
+          <li><a href="/resize-page-size">Resize Page Size</a></li>
+          <li><a href="/rotate-pdf">Rotate PDF</a></li>
+          <li><a href="/split-pdf">Split PDF</a></li>
+        </ul>
+      </div>
+      <div class="seo-tool-directory-group">
+        <h3>Edit PDF</h3>
+        <ul>
+          <li><a href="/header-footer">Add Header &amp; Footer</a></li>
+          <li><a href="/page-numbers">Add Page Numbers</a></li>
+          <li><a href="/compare-pdf">Compare PDF</a></li>
+          <li><a href="/crop-pdf">Crop PDF</a></li>
+          <li><a href="/edit-pdf">Edit PDF</a></li>
+          <li><a href="/edit-pdf-metadata">Edit PDF Metadata</a></li>
+          <li><a href="/fill-pdf-form">Fill PDF Form</a></li>
+          <li><a href="/invert-pdf-colors">Invert PDF Colors</a></li>
+          <li><a href="/watermark-pdf">Watermark PDF</a></li>
+        </ul>
+      </div>
+      <div class="seo-tool-directory-group">
+        <h3>Security</h3>
+        <ul>
+          <li><a href="/flatten-pdf">Flatten PDF</a></li>
+          <li><a href="/protect-pdf">Protect PDF</a></li>
+          <li><a href="/sign-pdf">Sign PDF</a></li>
+          <li><a href="/unlock-pdf">Unlock PDF</a></li>
+        </ul>
+      </div>
+      <div class="seo-tool-directory-group">
+        <h3>Optimize</h3>
+        <ul>
+          <li><a href="/compress-pdf">Compress PDF</a></li>
+          <li><a href="/image-compressor">Image Compressor</a></li>
+          <li><a href="/pdf-counter">PDF Counter</a></li>
+          <li><a href="/repair-pdf">Repair PDF</a></li>
+        </ul>
+      </div>
+      <div class="seo-tool-directory-group">
+        <h3>Convert PDF</h3>
+        <ul>
+          <li><a href="/excel-to-pdf">Excel to PDF</a></li>
+          <li><a href="/extract-images">Extract Images from PDF</a></li>
+          <li><a href="/extract-text">Extract Text from PDF</a></li>
+          <li><a href="/jpg-to-pdf">JPG to PDF</a></li>
+          <li><a href="/merge-excel">Merge Excel</a></li>
+          <li><a href="/pdf-to-excel">PDF to Excel</a></li>
+          <li><a href="/pdf-to-jpg">PDF to JPG</a></li>
+          <li><a href="/pdf-to-markdown">PDF to Markdown</a></li>
+          <li><a href="/pdf-to-powerpoint">PDF to PowerPoint</a></li>
+          <li><a href="/pdf-to-word">PDF to Word</a></li>
+          <li><a href="/scan-to-pdf">Scan to PDF</a></li>
+          <li><a href="/word-to-pdf">Word to PDF</a></li>
+        </ul>
+      </div>
+      <div class="seo-tool-directory-group">
+        <h3>Image Tools</h3>
+        <ul>
+          <li><a href="/watermark-image">Add Watermark to Image</a></li>
+          <li><a href="/convert-image-format">Convert Image Format</a></li>
+          <li><a href="/crop-image">Crop Image</a></li>
+          <li><a href="/invert-image-colors">Invert Image Colors</a></li>
+          <li><a href="/resize-image">Resize Image</a></li>
+          <li><a href="/rotate-image">Rotate Image</a></li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</section>
+<!-- SEO_TOOL_DIRECTORY_END -->
+
+
+<section class="tool-seo-content">
+  <div class="tool-seo-block">
+    <h2>Why use PDF to Markdown?</h2>
+    <p class="tool-seo-intro">Documentation lives in Markdown now — wikis, static sites, notes apps. A PDF's content locked in a fixed layout can't join it until it's converted.</p>
+    <div class="tool-seo-grid">
+      <div class="tool-seo-card"><h3>Docs and wikis</h3><p>Move a spec, manual or report into a Markdown-based docs site with its structure intact.</p></div>
+      <div class="tool-seo-card"><h3>Notes and drafts</h3><p>Bring PDF content into a notes app as editable text instead of an attachment nobody can search.</p></div>
+      <div class="tool-seo-card"><h3>No AI in the loop</h3><p>The conversion is structural — headings, tables and lists from the document's own geometry — not a language model guessing at it.</p></div>
+    </div>
+  </div>
+
+  <div class="tool-seo-block">
+    <h2>How it works</h2>
+    <div class="tool-seo-steps">
+      <div class="tool-seo-step"><h3>Upload</h3><p>Add the PDF. It is analysed locally in your browser.</p></div>
+      <div class="tool-seo-step"><h3>Structure</h3><p>Headings are inferred from size and weight, tables from ruling lines and column geometry, lists from their markers.</p></div>
+      <div class="tool-seo-step"><h3>Download</h3><p>Get a .md file, or copy the Markdown from the preview.</p></div>
+    </div>
+  </div>
+
+  <div class="tool-seo-block">
+    <h2>Key features</h2>
+    <div class="tool-seo-grid">
+      <div class="tool-seo-card"><h3>Real headings</h3><p>Titles and section headings become ATX headings, not just bigger bold text.</p></div>
+      <div class="tool-seo-card"><h3>GFM tables</h3><p>Tables convert to pipe tables with alignment preserved as far as the geometry allows.</p></div>
+      <div class="tool-seo-card"><h3>Lists and links</h3><p>Bulleted and numbered lists keep their markers; links keep their targets.</p></div>
+      <div class="tool-seo-card"><h3>Page markers</h3><p>HTML comments mark page boundaries so the source layout stays traceable.</p></div>
+    </div>
+  </div>
+
+  <div class="tool-seo-block">
+    <h2>Who uses PDF to Markdown?</h2>
+    <div class="tool-seo-grid">
+      <div class="tool-seo-card"><h3>Migrating documentation</h3><p>Move legacy PDF manuals into a Markdown docs site page by page.</p></div>
+      <div class="tool-seo-card"><h3>Preparing content for editing</h3><p>Get a PDF's text into an editable, diffable format for revision.</p></div>
+      <div class="tool-seo-card"><h3>Building a knowledge base</h3><p>Convert reference PDFs into searchable Markdown notes.</p></div>
+    </div>
+  </div>
+
+  <div class="tool-seo-block">
+    <h2>Frequently asked questions</h2>
+    <details class="tool-seo-faq"><summary>Is my PDF uploaded to convert it?</summary><p>No. The same block extraction behind PDF to Word runs locally in your browser — nothing leaves your device.</p></details>
+    <details class="tool-seo-faq"><summary>Are tables preserved?</summary><p>Yes, as GitHub-style pipe tables, including spanned cells. Very complex multi-column layouts are flattened in reading order and may need a quick tidy-up.</p></details>
+    <details class="tool-seo-faq"><summary>What happens to images in the PDF?</summary><p>Images are not embedded in the Markdown file. Scanned, image-only pages produce no text — this site has no OCR.</p></details>
+  </div>
+
+  <div class="tool-seo-block">
+    <h2>Related tools</h2>
+    <div class="tool-seo-related">
+      <a href="/pdf-to-word">PDF to Word</a>
+      <a href="/extract-text">Extract Text from PDF</a>
+      <a href="/pdf-to-excel">PDF to Excel</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-grid">
+    <div class="footer-col">
+      <div class="fbrand">
+        <img class="brand-logo brand-logo-footer brand-logo-dark" src="assets/icons/yoyopdf-logo-dark-theme.png?v=1" alt="YOYOPDF">
+        <img class="brand-logo brand-logo-footer brand-logo-light" src="assets/icons/blue.png?v=1" alt="YOYOPDF">
+      </div>
+      <p data-i18n="footer.tagline">A free, browser-based PDF toolkit. Every file is processed locally on your device — nothing is ever uploaded to a server.</p>
+      <div class="footer-trust">
+        <div class="footer-trust-badge is-accent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span><b data-i18n="footer.badgeLocal">Local</b><span data-i18n="footer.badgeLocalSuffix">Processing</span></span>
+        </div>
+        <div class="footer-trust-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+          <span><b data-i18n="footer.badgePrivacy">Privacy</b><span data-i18n="footer.badgePrivacySuffix">Focused</span></span>
+        </div>
+        <div class="footer-trust-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>
+          <span><b data-i18n="footer.badgeBrowser">Browser</b><span data-i18n="footer.badgeBrowserSuffix">Based</span></span>
+        </div>
+      </div>
+    </div>
+    <div class="footer-divider" aria-hidden="true"></div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.pdfTools">PDF Tools</h4>
+      <ul>
+        <li><button data-open="merge" data-i18n="nav.merge">Merge PDF</button></li>
+        <li><button data-open="split" data-i18n="nav.split">Split PDF</button></li>
+        <li><button data-open="compress" data-i18n="nav.compress">Compress PDF</button></li>
+        <li><button data-filter="convert" data-scroll-tools="1" data-i18n="nav.convert">Convert PDF</button></li>
+        <li><button data-filter="all" data-scroll-tools="1" data-i18n="footer.allTools">All Tools</button></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.company">Company</h4>
+      <ul>
+        <li><button data-open="about" data-i18n="footer.about">About</button></li>
+        <li><a href="https://github.com" target="_blank" rel="noopener" data-i18n="footer.github">GitHub</a></li>
+        <li><button data-open="donate" data-i18n="footer.donate">Donate</button></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.resources">Resources</h4>
+      <ul>
+        <li><button data-open="contact" data-i18n="footer.contact">Contact</button></li>
+        <li><button data-open="about" data-i18n="footer.aboutFull">About YOYOPDF</button></li>
+        <li><a href="https://github.com" target="_blank" rel="noopener" data-i18n="footer.github">GitHub</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.legal">Legal</h4>
+      <ul>
+        <li><a href="/privacy-policy" data-i18n="footer.privacy">Privacy</a></li>
+        <li><button data-open="terms" data-i18n="footer.terms">Terms</button></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.social">Social</h4>
+      <div class="footer-social">
+        <button class="share-btn sm whatsapp" data-share="whatsapp" title="Share on WhatsApp" aria-label="Share on WhatsApp">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.29-1.39a9.9 9.9 0 0 0 4.75 1.21h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.5 2 12.04 2zm0 18.02h-.01a8.13 8.13 0 0 1-4.14-1.13l-.3-.18-3.08.81.82-3-.2-.31a8.1 8.1 0 0 1-1.25-4.3c0-4.48 3.65-8.12 8.14-8.12 2.17 0 4.21.85 5.75 2.38a8.06 8.06 0 0 1 2.38 5.75c0 4.48-3.65 8.1-8.11 8.1zm4.45-6.07c-.24-.12-1.44-.71-1.66-.79-.22-.08-.39-.12-.55.12-.16.24-.63.79-.78.95-.14.16-.29.18-.53.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.35-1.67-.14-.24-.02-.37.11-.49.11-.11.24-.29.36-.43.12-.15.16-.25.24-.41.08-.16.04-.31-.02-.43-.06-.12-.55-1.32-.75-1.81-.2-.48-.4-.41-.55-.42h-.47c-.16 0-.43.06-.65.31-.22.24-.86.84-.86 2.05s.88 2.38 1 2.54c.12.16 1.73 2.64 4.2 3.7.59.25 1.05.4 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.44-.59 1.64-1.16.2-.57.2-1.06.14-1.16-.06-.1-.22-.16-.46-.28z"/></svg>
+        </button>
+        <button class="share-btn sm facebook" data-share="facebook" title="Share on Facebook" aria-label="Share on Facebook">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5 3.66 9.15 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.91h-2.34V22c4.78-.79 8.44-4.94 8.44-9.94z"/></svg>
+        </button>
+        <button class="share-btn sm instagram" data-share="instagram" title="Share on Instagram" aria-label="Share on Instagram">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1"/></svg>
+        </button>
+        <button class="share-btn sm x" data-share="x" title="Share on X" aria-label="Share on X">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.9 2H22l-7.6 8.7L23.3 22h-6.9l-5.4-7.1L4.7 22H1.6l8.1-9.3L1 2h7l4.9 6.5L18.9 2zm-1.2 18h1.9L7.4 4H5.4l12.3 16z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">© <span id="footerYear"></span> <span data-i18n="footer.copyright">YOYOPDF.</span></div>
+    <div class="footer-copy" data-i18n="footer.localNote">All processing happens locally in your browser.</div>
+  </div>
+</footer>
+
+<div class="overlay" id="overlay">
+  <div class="panel" id="panel" role="dialog" aria-modal="true" aria-label="Tool panel" tabindex="-1"></div>
+</div>
+<div class="toast" id="toast"></div>
+<nav id="quickDock" aria-label="Quick tools"></nav>
+<button type="button" id="quickDockFab" aria-haspopup="true" aria-expanded="false" aria-controls="quickDockMenu" aria-label="Quick tools">YOYO</button>
+<div id="quickDockMenu" role="menu" aria-label="Quick tools menu"></div>
+
+<div class="qa-overlay" id="qaOverlay" role="dialog" aria-modal="true" aria-labelledby="qaTitle">
+  <div class="qa-modal" id="qaModal"></div>
+</div>
+
+<!-- Cache-busting version query - without it, a returning visitor's
+     browser can keep serving a stale cached script after a deploy (this
+     was actually hit during development: editing TOOLS.sign/
+     TOOLS.fillform had zero effect in a browser tab that had already
+     loaded the old version, even after a hard reload). Bump the number
+     whenever any js/core, js/tools, or js/app.js file changes.
+
+     Load order matters: these are plain classic scripts (no bundler,
+     no type="module") that all share one global scope, exactly like
+     js/app.js used to be as a single file - splitting it into these
+     files is purely an organizational change, not a behavioral one.
+     Each file below is a verbatim, contiguous slice of the original
+     js/app.js in its original top-to-bottom order, so any top-level
+     code that ran immediately at parse time still sees everything it
+     used to see already defined. js/app.js itself is now just the
+     PDFLib setup + the homepage/global orchestration IIFEs that used
+     to sit at the very top and very bottom of the original file, and
+     must stay loaded last. -->
+<!-- RUNTIME_SCRIPTS_START -->
+<script defer src="js/core/i18n.js?v=149"></script>
+<script defer src="js/core/motion.js?v=149"></script>
+<script defer src="js/core/nav-menu.js?v=149"></script>
+<script defer src="js/core/hero-upload.js?v=149"></script>
+<script defer src="js/core/routing.js?v=149"></script>
+<script defer src="js/core/quick-actions.js?v=149"></script>
+<script defer src="js/core/panel.js?v=149"></script>
+<script defer src="js/core/ratings.js?v=149"></script>
+<script defer src="js/core/pdf-processing-utils.js?v=149"></script>
+<script defer src="js/tools/misc-tools.js?v=149"></script>
+<script defer src="js/core/doc-export-builders.js?v=149"></script>
+<script defer src="js/tools/pdf-extra-tools.js?v=149"></script>
+<script defer src="js/app.js?v=149"></script>
+<!-- RUNTIME_SCRIPTS_END -->
+</body>
+</html>

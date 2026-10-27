@@ -160,6 +160,138 @@ function resolveImageComponents(colorSpaceObj, context, PDFName){
   if(nVal===1) return 1;
   return null; // 4-component (CMYK) ICC profile, or unresolvable
 }
+/* Resolves an [/Indexed base hival lookup] colour space for the Flate
+   image path: the palette (lookup) bytes plus the base space's component
+   count (3=RGB, 1=Gray). Returns null for anything else (Separation,
+   Lab, ICCBased bases, non-8-bit lookups are rejected by the caller).
+   The lookup may be a literal/hex string or a stream behind a reference;
+   anything unresolvable returns null so the image is left untouched.
+   Mirrored in js/workers/pdf-compress-worker.js - keep the two in step. */
+function resolveIndexedColorSpace(colorSpaceObj, context, PDFName){
+  try{
+    const arr = colorSpaceObj?.array;
+    if(!Array.isArray(arr) || !arr.length) return null;
+    if(arr[0]?.asString?.() !== "/Indexed") return null;
+    const base = arr[1];
+    let baseComponents = null;
+    const baseName = base?.asString?.();
+    if(/DeviceRGB|CalRGB/.test(baseName || "")) baseComponents = 3;
+    else if(/DeviceGray|CalGray/.test(baseName || "")) baseComponents = 1;
+    else {
+      // ICCBased base: [/ICCBased streamRef] - resolve N from the profile stream.
+      const baseArr = base?.array;
+      if(Array.isArray(baseArr) && baseArr[0]?.asString?.() === "/ICCBased"){
+        const streamObj = baseArr[1] && context?.lookup ? context.lookup(baseArr[1]) : null;
+        const n = streamObj?.dict?.lookup?.(PDFName.of("N"))?.asNumber?.();
+        if(n===3) baseComponents = 3;
+        else if(n===1) baseComponents = 1;
+      }
+    }
+    if(!baseComponents) return null;
+    const hival = arr[2]?.asNumber?.();
+    if(!Number.isInteger(hival) || hival<0 || hival>255) return null;
+    let lookupObj = arr[3];
+    if(lookupObj && context?.lookup && typeof lookupObj !== "string") {
+      // A reference resolves to the stream/string it points at; a direct
+      // object is used as-is. lookup() on a non-ref returns the object.
+      try{ lookupObj = context.lookup(lookupObj); }catch(e){ /* fall through with the direct object */ }
+    }
+    let lookup = null;
+    if(lookupObj?.asBytes) lookup = lookupObj.asBytes();
+    else if(lookupObj?.contents) lookup = lookupObj.contents;
+    if(!lookup || lookup.length < (hival+1)*baseComponents) return null;
+    return {baseComponents, hival, lookup: lookup.slice(0, (hival+1)*baseComponents)};
+  }catch(e){ return null; }
+}
+/* True only for a DIRECT /DeviceCMYK colour space (name or 1-element
+   array form). ICCBased CMYK profiles are deliberately NOT matched: their
+   transform is profile-defined, and a naive CMYK->RGB conversion would
+   shift colours. Direct DeviceCMYK with an identity /Decode uses the
+   standard simple transform (see cmykPixelsToRgba), which is safe. */
+function isDeviceCmykColorSpace(colorSpaceObj){
+  if(!colorSpaceObj) return false;
+  if(colorSpaceObj.asString) return colorSpaceObj.asString() === "/DeviceCMYK";
+  const arr = colorSpaceObj.array;
+  return Array.isArray(arr) && arr.length>0 && arr[0]?.asString?.() === "/DeviceCMYK";
+}
+/* Expands 8-bit palette-index bytes to RGBA using a palette lookup:
+   raw holds one index byte per pixel; lookup holds (hival+1) palette
+   entries of baseComponents bytes each. An index past the palette is
+   clamped to the last entry rather than corrupting the row - the caller
+   already validated the lookup length, so this is belt-and-braces. Pure. */
+function indexedPixelsToRgba(raw, width, height, lookup, baseComponents){
+  const rgba = new Uint8ClampedArray(width*height*4);
+  const entries = Math.floor(lookup.length / baseComponents);
+  for(let p=0; p<width*height; p++){
+    const idx = Math.min(raw[p] || 0, entries-1);
+    const off = idx*baseComponents;
+    if(baseComponents===3){
+      rgba[p*4]=lookup[off]; rgba[p*4+1]=lookup[off+1]; rgba[p*4+2]=lookup[off+2];
+    } else {
+      const g = lookup[off]; rgba[p*4]=g; rgba[p*4+1]=g; rgba[p*4+2]=g;
+    }
+    rgba[p*4+3]=255;
+  }
+  return rgba;
+}
+/* Expands 8-bit DeviceCMYK bytes to RGBA with the standard simple
+   transform R=(1-C)(1-K), G=(1-M)(1-K), B=(1-Y)(1-K). Only valid for
+   direct DeviceCMYK data under an identity /Decode - the caller enforces
+   both before calling. Pure. */
+function cmykPixelsToRgba(raw, width, height){
+  const rgba = new Uint8ClampedArray(width*height*4);
+  for(let p=0, s=0; p<width*height; p++, s+=4){
+    const k = raw[s+3]/255;
+    rgba[p*4]   = Math.round(255*(1-raw[s]/255)*(1-k));
+    rgba[p*4+1] = Math.round(255*(1-raw[s+1]/255)*(1-k));
+    rgba[p*4+2] = Math.round(255*(1-raw[s+2]/255)*(1-k));
+    rgba[p*4+3] = 255;
+  }
+  return rgba;
+}
+/* Overwrites the alpha channel of RGBA pixel data with decoded soft-mask
+   bytes (one byte per pixel). Pure. */
+function applySmaskToRgba(rgba, alphaBytes){
+  const n = Math.min(alphaBytes.length, rgba.length/4);
+  for(let p=0; p<n; p++) rgba[p*4+3] = alphaBytes[p];
+  return rgba;
+}
+/* Decodes an image's /SMask soft mask to one alpha byte per pixel, or
+   null when the mask cannot be decoded safely (in which case the caller
+   leaves the image untouched). Only 8-bit grayscale FlateDecode masks at
+   exactly the base image's dimensions are attempted: JPEG masks need a
+   canvas decode whose result depends on the viewer's colour handling,
+   ImageMask (1-bit) and mismatched-size masks need resampling - all
+   out of scope rather than guessed. The mask's own /Decode must be
+   identity (a remapped mask would invert transparency). Mirrored in
+   js/workers/pdf-compress-worker.js - keep the two in step. */
+async function decodeSmaskAlpha(smaskObj, context, PDFName, width, height){
+  try{
+    let maskObj = smaskObj;
+    if(maskObj && context?.lookup){
+      try{ maskObj = context.lookup(maskObj); }catch(e){ /* direct object */ }
+    }
+    if(!maskObj || typeof maskObj !== "object") return null;
+    const dict = maskObj.dict;
+    if(!dict) return null;
+    const w = dict.lookup(PDFName.of("Width"))?.asNumber?.();
+    const h = dict.lookup(PDFName.of("Height"))?.asNumber?.();
+    if(w!==width || h!==height) return null;
+    const bpc = dict.lookup(PDFName.of("BitsPerComponent"))?.asNumber?.();
+    if(bpc!==8) return null;
+    const filter = dict.lookup(PDFName.of("Filter"));
+    const filterName = filter?.asString?.() || "";
+    if(filterName !== "/FlateDecode") return null;
+    if(!isIdentityDecode(dict.lookup(PDFName.of("Decode")))) return null;
+    const predictor = dict.lookup(PDFName.of("DecodeParms"))?.lookup?.(PDFName.of("Predictor"))?.asNumber?.() ?? 1;
+    if(predictor!==1 && (predictor<10 || predictor>15)) return null;
+    const inflated = await inflateFlateBytes(maskObj.contents);
+    if(!inflated) return null;
+    const raw = predictor===1 ? inflated : unfilterPngRows(inflated, width, height, 1, width);
+    if(!raw || raw.length < width*height) return null;
+    return raw.slice(0, width*height);
+  }catch(e){ return null; }
+}
 /* Inflates a raw (headers-and-all) FlateDecode stream using the browser's
    native zlib implementation - no extra dependency needed alongside
    pdf-lib/pdf.js. FlateDecode in PDF is the zlib format (RFC 1950), which
@@ -238,12 +370,20 @@ function unfilterPngRows(data, width, height, components, rowBytes){
        the JPEG path below, converting it to a real JPEG.
    Both paths require a colour space this function can confidently resolve
    to RGB or Gray (DeviceRGB/DeviceGray/CalRGB/CalGray, or an ICCBased
-   space whose stream declares N=3 or N=1) and no soft mask - CMYK,
-   Indexed, Separation/DeviceN, and anything with an alpha channel is left
-   completely untouched rather than risking wrong colors or lost
-   transparency. Real-world "PDF is too big" cases are almost always
-   driven by embedded photos/scans in one of these two forms, so this
-   covers the common case without the risk of a broader rewrite. */
+   space whose stream declares N=3 or N=1). The Flate path additionally
+   handles [/Indexed …] palettes (expanded through the lookup table) and
+   direct /DeviceCMYK (standard simple transform, identity /Decode only).
+   Images with a soft mask (/SMask) are composited onto white when the
+   mask is a same-size 8-bit grayscale FlateDecode stream that decodes
+   cleanly - the mask entry is then dropped from the replacement, and the
+   result UI discloses it (see stats.alphaComposited). Separation/DeviceN,
+   Lab, ICCBased CMYK, colour-key /Mask images, JPEG CMYK/Indexed images
+   and undecodable masks are still left completely untouched rather than
+   risking wrong colors or lost transparency. Real-world "PDF is too big"
+   cases are almost always driven by embedded photos/scans in one of these
+   forms, so this covers the common case without the risk of a broader rewrite.
+   Mirrored in js/workers/pdf-compress-worker.js - keep the two in step:
+   the worker file duplicates this loop and the helpers above it. */
 // How often (in encoded images, not PDF objects) the main-thread fallback
 // yields to the event loop during its per-image encode loop - see the
 // yield's own comment further down for why. Benchmarked on a real
@@ -284,9 +424,14 @@ function isIdentityDecode(decode){
    (they are not pictures the user knows about); `eligible` = passed every
    guard and was actually decoded; eligible = replaced + noGain +
    decodeFailed. Mirrored in js/workers/pdf-compress-worker.js. */
+/* Widened-engine counters fromIndexed/fromCmyk/alphaComposited (see
+   recompressPdfImagesMainThread) are part of this shape: the worker twin
+   (js/workers/pdf-compress-worker.js) must keep this function's body
+   byte-identical - see tests/compress-v2.test.js's mirror check. */
 function newCompressStats(){
   return {
     found:0, eligible:0, replaced:0, noGain:0, decodeFailed:0, maskImages:0, documentPages:0,
+    fromIndexed:0, fromCmyk:0, alphaComposited:0,
     skipped:{unsupportedFilter:0, alpha:0, masked:0, decode:0, colorSpace:0, unsupportedParams:0, error:0}
   };
 }
@@ -342,6 +487,27 @@ function describeCompressOutcome(input){
     return out;
   }
   return {kind:"structure", changed:true, key:"toolCompress.outStructure", vars};
+}
+/* Turns the engine's per-reason skip counters into the non-zero entries
+   the result UI lists ("Left unchanged: 2 with transparency, 1 with CMYK
+   colour"). Pure - fixed category order, so the wording is stable across
+   runs. decodeFailed is deliberately NOT included: those images were
+   eligible but undecodable, a different statement from "skipped for a
+   known reason". */
+const COMPRESS_SKIP_REASONS = [
+  ["alpha", "toolCompress.skipAlpha"],
+  ["masked", "toolCompress.skipMasked"],
+  ["colorSpace", "toolCompress.skipColorSpace"],
+  ["unsupportedFilter", "toolCompress.skipFilter"],
+  ["decode", "toolCompress.skipDecode"],
+  ["unsupportedParams", "toolCompress.skipParams"],
+  ["error", "toolCompress.skipError"],
+];
+function compressSkipBreakdown(stats){
+  const sk = (stats && stats.skipped) || {};
+  return COMPRESS_SKIP_REASONS
+    .filter(([kind]) => (sk[kind] || 0) > 0)
+    .map(([kind, key]) => ({key, count: sk[kind]}));
 }
 /* Camera JPEGs can carry an EXIF Orientation tag. PDF viewers ignore EXIF,
    but createImageBitmap()/<img> apply it, so decoding such an image and
@@ -446,7 +612,17 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       // doesn't implement, so it's left untouched rather than guessed at.
       const isRawFlate = filterName === "/FlateDecode";
       if(!isJpeg && !isRawFlate){ stats.skipped.unsupportedFilter++; continue; } // neither format this function knows how to re-encode
-      if(dict.lookup(PDFName.of("SMask"))){ stats.skipped.alpha++; continue; } // has transparency - skip, JPEG can't keep it
+      // A soft mask (/SMask) is transparency data for THIS image: JPEG
+      // cannot carry it, so the image used to be skipped outright. It is
+      // now composited onto white when the mask decodes cleanly (see
+      // decodeSmaskAlpha + the composite steps in each branch below) and
+      // the /SMask entry is dropped from the replacement dict - the
+      // composited JPEG already has the transparency baked in, so keeping
+      // the mask would apply it twice. Undecodable masks still skip.
+      const smaskObj = dict.lookup(PDFName.of("SMask"));
+      const hasSmask = !!smaskObj;
+      let compositedAlpha = false; // set once a mask is actually baked in
+      let replacedKind = null; // "indexed" | "cmyk" | null, for stats
       // A colour-key /Mask marks specific sample values transparent; a lossy
       // re-encode no longer produces those exact values, so the transparency
       // would silently break.
@@ -473,18 +649,52 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
           createImageBitmap(blob),
           new Promise((_, reject) => setTimeout(() => reject(new Error("decode timed out")), 8000))
         ]).catch(()=>null);
+        if(bitmap && hasSmask){
+          // Composite the soft mask onto white: fill white, draw the
+          // image, then destination-in with a mask canvas whose alpha
+          // channel is the mask (RGB is irrelevant for destination-in).
+          // The result is an opaque bitmap - the JPEG below needs no
+          // further alpha handling, and the replacement dict drops /SMask.
+          const mw = dict.lookup(PDFName.of("Width"))?.asNumber?.();
+          const mh = dict.lookup(PDFName.of("Height"))?.asNumber?.();
+          const alpha = (mw && mh) ? await decodeSmaskAlpha(smaskObj, doc.context, PDFName, mw, mh) : null;
+          if(!alpha){ stats.skipped.alpha++; continue; }
+          try{
+            const maskRgba = new Uint8ClampedArray(mw*mh*4);
+            for(let p=0; p<mw*mh; p++) maskRgba[p*4+3] = alpha[p];
+            const maskBitmap = await createImageBitmap(new ImageData(maskRgba, mw, mh));
+            const compCanvas = document.createElement("canvas");
+            compCanvas.width = bitmap.width; compCanvas.height = bitmap.height;
+            const cctx = compCanvas.getContext("2d");
+            cctx.fillStyle = "#fff"; cctx.fillRect(0, 0, compCanvas.width, compCanvas.height);
+            cctx.drawImage(bitmap, 0, 0);
+            cctx.globalCompositeOperation = "destination-in";
+            cctx.drawImage(maskBitmap, 0, 0, compCanvas.width, compCanvas.height);
+            cctx.globalCompositeOperation = "source-over";
+            bitmap = await createImageBitmap(compCanvas);
+            compositedAlpha = true;
+          }catch(e){ stats.skipped.alpha++; continue; }
+        }
       } else {
         // Raw/lossless image: unlike JPEG, the pixel bytes carry no
         // built-in colour-space signal, so this path requires a
-        // confidently-resolved component count (3=RGB, 1=Gray) rather
-        // than the JPEG path's "assume RGB unless proven otherwise" -
-        // guessing wrong here would corrupt every pixel, not just miss a
-        // compression opportunity.
+        // confidently-resolved pixel format - RGB/Gray (as before), or
+        // now Indexed (palette-expanded) and direct DeviceCMYK (standard
+        // simple transform). Guessing wrong here would corrupt every
+        // pixel, not just miss a compression opportunity, so anything
+        // else still leaves the image untouched.
         const width = dict.lookup(PDFName.of("Width"))?.asNumber?.();
         const height = dict.lookup(PDFName.of("Height"))?.asNumber?.();
         const bpc = dict.lookup(PDFName.of("BitsPerComponent"))?.asNumber?.();
         const components = resolveImageComponents(dict.lookup(PDFName.of("ColorSpace")), doc.context, PDFName);
-        if(!components){ stats.skipped.colorSpace++; continue; }
+        let pixelKind = components===3 ? "rgb" : (components===1 ? "gray" : null);
+        let indexedInfo = null;
+        if(!pixelKind){
+          indexedInfo = resolveIndexedColorSpace(dict.lookup(PDFName.of("ColorSpace")), doc.context, PDFName);
+          if(indexedInfo) pixelKind = "indexed";
+          else if(isDeviceCmykColorSpace(dict.lookup(PDFName.of("ColorSpace")))) pixelKind = "cmyk";
+        }
+        if(!pixelKind){ stats.skipped.colorSpace++; continue; }
         // 8 bits/component only - 1/2/4-bit raw images (rare, and usually
         // already tiny after Flate) and 16-bit are out of scope here.
         // Width*height capped well under typical browser/canvas limits so
@@ -500,18 +710,36 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
           new Promise((_, reject) => setTimeout(() => reject(new Error("inflate timed out")), 8000))
         ]).catch(()=>null);
         if(!inflated){ stats.decodeFailed++; continue; }
-        const rowBytes = width*components;
-        const raw = predictor===1 ? inflated : unfilterPngRows(inflated, width, height, components, rowBytes);
+        // Bytes per pixel in the inflated stream: RGB 3, Gray 1, palette
+        // index 1, CMYK 4. unfilterPngRows' bpp is this same value (it
+        // only ever runs at 8 bits/component here).
+        const rowComponents = pixelKind==="rgb" ? 3 : pixelKind==="cmyk" ? 4 : 1;
+        const rowBytes = width*rowComponents;
+        const raw = predictor===1 ? inflated : unfilterPngRows(inflated, width, height, rowComponents, rowBytes);
         if(!raw || raw.length < rowBytes*height){ stats.decodeFailed++; continue; } // truncated/corrupt - leave untouched
-        const rgba = new Uint8ClampedArray(width*height*4);
-        if(components===3){
+        let rgba;
+        if(pixelKind==="rgb"){
+          rgba = new Uint8ClampedArray(width*height*4);
           for(let p=0, s=0; p<width*height; p++, s+=3){
             rgba[p*4]=raw[s]; rgba[p*4+1]=raw[s+1]; rgba[p*4+2]=raw[s+2]; rgba[p*4+3]=255;
           }
-        } else { // components===1, DeviceGray/CalGray
+        } else if(pixelKind==="gray"){
+          rgba = new Uint8ClampedArray(width*height*4);
           for(let p=0; p<width*height; p++){
             const g = raw[p]; rgba[p*4]=g; rgba[p*4+1]=g; rgba[p*4+2]=g; rgba[p*4+3]=255;
           }
+        } else if(pixelKind==="indexed"){
+          rgba = indexedPixelsToRgba(raw, width, height, indexedInfo.lookup, indexedInfo.baseComponents);
+          replacedKind = "indexed";
+        } else { // cmyk
+          rgba = cmykPixelsToRgba(raw, width, height);
+          replacedKind = "cmyk";
+        }
+        if(hasSmask){
+          const alpha = await decodeSmaskAlpha(smaskObj, doc.context, PDFName, width, height);
+          if(!alpha){ stats.skipped.alpha++; continue; }
+          applySmaskToRgba(rgba, alpha);
+          compositedAlpha = true;
         }
         bitmap = await createImageBitmap(new ImageData(rgba, width, height)).catch(()=>null);
       }
@@ -541,7 +769,15 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       }
       const canvas = document.createElement("canvas");
       canvas.width = width; canvas.height = height;
-      canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+      const encodeCtx = canvas.getContext("2d");
+      // White first: bitmaps carrying real alpha (soft-mask compositing
+      // above) must composite onto white, not onto the transparent-black
+      // a bare canvas would hand the JPEG encoder. Previously every
+      // bitmap reaching this point was fully opaque, so this changes
+      // nothing for them.
+      encodeCtx.fillStyle = "#fff";
+      encodeCtx.fillRect(0, 0, width, height);
+      encodeCtx.drawImage(bitmap, 0, 0, width, height);
       const newDataUrl = canvas.toDataURL("image/jpeg", quality);
       const newBytes = Uint8Array.from(atob(newDataUrl.split(",")[1]), c=>c.charCodeAt(0));
       // canvas.toDataURL() above is a synchronous, CPU-heavy JPEG encode -
@@ -572,12 +808,19 @@ async function recompressPdfImagesMainThread(pdfBytes, presetName, onImageProgre
       // (component remap, e.g. an inverted-grayscale mask) no longer apply
       // once the stream is real DCTDecode/DeviceRGB JPEG data - carrying
       // either over would misinterpret the new bytes. (Decode can only be
-      // identity here - non-identity images were skipped above.)
+      // identity here - non-identity images were skipped above.) A
+      // composited /SMask is likewise dropped: the transparency is
+      // already baked into the JPEG pixels, and keeping the mask would
+      // apply it a second time.
       newDict.delete(PDFName.of("DecodeParms"));
       newDict.delete(PDFName.of("Decode"));
+      if(compositedAlpha) newDict.delete(PDFName.of("SMask"));
       doc.context.assign(ref, PDFRawStream.of(newDict, newBytes));
       touched++;
       stats.replaced = touched;
+      if(compositedAlpha) stats.alphaComposited = (stats.alphaComposited || 0) + 1;
+      if(replacedKind==="indexed") stats.fromIndexed = (stats.fromIndexed || 0) + 1;
+      if(replacedKind==="cmyk") stats.fromCmyk = (stats.fromCmyk || 0) + 1;
     }catch(e){
       // Cancellation (thrown by throwIfCompressionCancelled at the yield
       // point above) must propagate out of the loop, not be swallowed as

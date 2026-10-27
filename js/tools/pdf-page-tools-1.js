@@ -112,12 +112,13 @@ TOOLS.split = function(){
         </div>
         <aside class="tool-side-panel">
           <div id="splitFileSlot"></div>
+          <p class="mode-info" id="splitDefaultNote">${t("toolSplit.defaultModeNote")}</p>
           <div class="mode-tabs" role="tablist" aria-label="${t("toolSplit.modeLabel")}">
-            <button type="button" class="mode-tab active" data-mode="range" role="tab" aria-selected="true">
+            <button type="button" class="mode-tab" data-mode="range" role="tab" aria-selected="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6v6H4zM14 14h6v6h-6z"/><path d="M10 7h4M17 10v4M7 17h4"/></svg>
               ${t("toolSplit.tabRange")}
             </button>
-            <button type="button" class="mode-tab" data-mode="pages" role="tab" aria-selected="false">
+            <button type="button" class="mode-tab active" data-mode="pages" role="tab" aria-selected="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l3 3v15H6z"/><path d="M6 9h6M6 13h6M6 17h6"/></svg>
               ${t("toolSplit.tabPages")}
             </button>
@@ -126,7 +127,7 @@ TOOLS.split = function(){
               ${t("toolSplit.tabSize")}
             </button>
           </div>
-          <div class="mode-panel" data-mode-panel="range">
+          <div class="mode-panel" data-mode-panel="range" hidden>
             <div class="mode-seg" role="tablist" aria-label="${t("toolSplit.rangeModeLabel")}">
               <button type="button" class="mode-seg-btn active" data-rangemode="custom" role="tab" aria-selected="true">${t("toolSplit.rangeCustom")}</button>
               <button type="button" class="mode-seg-btn" data-rangemode="fixed" role="tab" aria-selected="false">${t("toolSplit.rangeFixed")}</button>
@@ -155,15 +156,15 @@ TOOLS.split = function(){
               </div>
             </div>
           </div>
-          <div class="mode-panel" data-mode-panel="pages" hidden>
+          <div class="mode-panel" data-mode-panel="pages">
             <div class="mode-seg" role="tablist" aria-label="${t("toolSplit.extractModeLabel")}">
-              <button type="button" class="mode-seg-btn" data-extractmode="all" role="tab" aria-selected="false">${t("toolSplit.extractAll")}</button>
-              <button type="button" class="mode-seg-btn active" data-extractmode="select" role="tab" aria-selected="true">${t("toolSplit.extractSelect")}</button>
+              <button type="button" class="mode-seg-btn active" data-extractmode="all" role="tab" aria-selected="true">${t("toolSplit.extractAll")}</button>
+              <button type="button" class="mode-seg-btn" data-extractmode="select" role="tab" aria-selected="false">${t("toolSplit.extractSelect")}</button>
             </div>
-            <div data-extractmode-panel="all" hidden>
+            <div data-extractmode-panel="all">
               <p class="mode-info">${t("toolSplit.allExtractedInfo")}</p>
             </div>
-            <div data-extractmode-panel="select">
+            <div data-extractmode-panel="select" hidden>
               <div class="field"><label for="pagesToExtract">${t("toolSplit.pagesToExtract")}</label><input type="text" id="pagesToExtract" placeholder="e.g. 1,5-8"></div>
               <div class="mode-info" id="pagesSelectedCount">${t("toolSplit.clickOrType")}</div>
             </div>
@@ -180,7 +181,7 @@ TOOLS.split = function(){
             <p class="mode-info">${t("toolSplit.sizePackInfo")}</p>
           </div>
           <div class="split-error" id="splitError" hidden></div>
-          <button class="btn tool-toolbar-primary" id="go">${t("toolSplit.goBtnSplit")}</button>
+          <button class="btn tool-toolbar-primary" id="go">${t("toolSplit.goBtnExtract")}</button>
         </aside>
       </div>
       <div id="out"></div>
@@ -342,9 +343,13 @@ TOOLS.split = function(){
   document.getElementById("selEven").addEventListener("click", ()=>gridApi && gridApi.selectOddEven("even"));
   document.getElementById("selClear").addEventListener("click", ()=>gridApi && gridApi.clearSelection());
 
-  let splitMode = "range";
+  /* Default mode is Pages / Extract-all: pressing the main button with
+     no further choices splits EVERY page into its own file. Previously
+     Range / Custom was the default with a silent 1–N range, so the
+     default flow returned the whole document as one unchanged file. */
+  let splitMode = "pages";
   let rangeMode = "custom";
-  let extractMode = "select";
+  let extractMode = "all";
 
   document.querySelectorAll(".mode-tab").forEach(tab=>{
     tab.addEventListener("click", ()=>{
@@ -573,9 +578,7 @@ TOOLS.split = function(){
           : gridApi.getSelectedPages().map(p=>p.index);
       }
       mergeOutput = document.getElementById("mergeExtractedChk").checked;
-      groups = mergeOutput
-        ? [pageIndices.map(index=>({index, rotation:liveIndexRotation.get(index) ?? 0}))]
-        : pageIndices.map(index=>[{index, rotation:liveIndexRotation.get(index) ?? 0}]);
+      groups = splitPageGroups(pageIndices, liveIndexRotation, mergeOutput);
     }
     if(mergeOutput && groups.length>1){
       groups = [groups.flat()];
@@ -600,10 +603,15 @@ TOOLS.split = function(){
     } else {
       await ensureJSZip();
       const zip = new JSZip();
+      // Kept alongside the ZIP so each part can also be downloaded on its
+      // own below - a ZIP alone forced every user to unzip just to get
+      // one page. Part bytes are held only until this result is replaced.
+      const partBytes = [];
       for(let i=0;i<groups.length;i++){
         setStatus(t("toolSplit.statusSplitting"), false, Math.round((i/groups.length)*100));
         const doc = await buildPdfFromPages(src, groups[i]);
         const b = await doc.save();
+        partBytes.push(b);
         zip.file(`part_${i+1}.pdf`, b);
       }
       const zipBlob = await zip.generateAsync({type:"blob"});
@@ -612,7 +620,36 @@ TOOLS.split = function(){
       const {url} = downloadBlob(zipBlob, outName);
       setStatus(t("toolSplit.doneFiles",{n:groups.length}), true);
       if(!operation.isCurrent()) return;
-      out.appendChild(resultBox({sizeText:fmtSize(zipBlob.size), sizeGood:true, url, filename:outName, nextTool:{id:"organize", label:t("tools.organize"), question:t("toolSplit.nextToolQuestion")}}));
+      const box = resultBox({sizeText:fmtSize(zipBlob.size), sizeGood:true, url, filename:outName, nextTool:{id:"organize", label:t("tools.organize"), question:t("toolSplit.nextToolQuestion")}});
+      const partsWrap = document.createElement("div");
+      partsWrap.className = "mode-info";
+      partsWrap.style.marginTop = "10px";
+      const partsLabel = document.createElement("div");
+      partsLabel.textContent = t("toolSplit.downloadEachLabel");
+      partsWrap.appendChild(partsLabel);
+      partBytes.forEach((bytes, i)=>{
+        const link = document.createElement("a");
+        link.href = "#";
+        link.textContent = `part_${i+1}.pdf`;
+        link.style.marginRight = "12px";
+        // Deliberately NOT downloadBlob(): that helper revokes the
+        // previous result URL, which would break the ZIP download above.
+        // Each click mints a short-lived object URL for just that part.
+        link.addEventListener("click", (e)=>{
+          e.preventDefault();
+          const partUrl = URL.createObjectURL(new Blob([bytes], {type:"application/pdf"}));
+          const a = document.createElement("a");
+          a.href = partUrl;
+          a.download = `part_${i+1}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(()=>URL.revokeObjectURL(partUrl), 5000);
+        });
+        partsWrap.appendChild(link);
+      });
+      box.appendChild(partsWrap);
+      out.appendChild(box);
     }
   }));
 };
@@ -765,6 +802,12 @@ TOOLS.compress = function(){
     }
     const outcomeInput = {originalSize: bytes.byteLength, candidateSize: candidate.length, stats, floorPct: MIN_MEANINGFUL_SAVINGS_PCT, custom};
     let outcome = describeCompressOutcome(outcomeInput);
+    // Carry the engine stats forward so the result box can say WHY images
+    // were left unchanged (transparency, CMYK, unsupported format...) and
+    // whether any transparency was flattened onto white - see
+    // decorateResultBox() and compressSkipBreakdown() below.
+    outcome.stats = stats;
+    outcome.alphaComposited = stats.alphaComposited || 0;
     let finalBytes = outcome.changed ? candidate : new Uint8Array(bytes);
     // Validate before ever calling this a success: reload both the
     // original and the compressed output and require the same page
@@ -812,6 +855,31 @@ TOOLS.compress = function(){
     note.textContent = outcomeMessage(outcome);
     const anchor = box.querySelector(".thumbs") || box.querySelector(".dl-link");
     if(anchor) box.insertBefore(note, anchor); else box.appendChild(note);
+    // Why images were left unchanged, in plain language - the engine
+    // already counted every skip reason; previously only a bare total
+    // ("N images left unchanged") ever reached the user, with no way to
+    // tell whether the cause was transparency, colour space, or format.
+    const breakdown = outcome.stats ? compressSkipBreakdown(outcome.stats) : [];
+    if(breakdown.length){
+      const detail = document.createElement("div");
+      detail.className = "mode-info compress-note";
+      detail.style.margin = "0 0 12px";
+      detail.style.textAlign = "left";
+      detail.textContent = t("toolCompress.skipDetailLabel") + " " + breakdown.map(b=>t(b.key, {n:b.count})).join(", ") + ".";
+      if(anchor) box.insertBefore(detail, anchor); else box.appendChild(detail);
+    }
+    // Transparency flattened onto white is a visible change, not just a
+    // smaller file - it must be disclosed, not discovered. Only images
+    // whose soft mask decoded cleanly take this path (see
+    // recompressPdfImagesMainThread); undecodable ones are left alone.
+    if(outcome.alphaComposited>0){
+      const alphaNote = document.createElement("div");
+      alphaNote.className = "mode-info compress-note";
+      alphaNote.style.margin = "0 0 12px";
+      alphaNote.style.textAlign = "left";
+      alphaNote.textContent = t("toolCompress.alphaNote", {n:outcome.alphaComposited});
+      if(anchor) box.insertBefore(alphaNote, anchor); else box.appendChild(alphaNote);
+    }
     if(!outcome.changed){
       const heading = box.querySelector(".result-head h3");
       if(heading) heading.textContent = "ℹ️ " + t("toolCompress.resultHeadingUnchanged");
@@ -937,7 +1005,12 @@ TOOLS.compress = function(){
 /* ---- ROTATE ---- */
 TOOLS.rotate = function(){
   const t = window.I18N ? I18N.t : (k)=>k;
-  let file=null, gridApi=null, loadToken=0;
+  // Multi-file: visibleFiles keeps a STABLE docIndex per file (never
+  // recomputed after a removal), because grid cards carry the docIndex
+  // they were built with - splicing a plain files[] array would silently
+  // remap every later file's pages to the wrong source document.
+  let visibleFiles=[], gridApi=null, loadToken=0;
+  let srcDocs = new Map(); // docIndex -> pdf-lib PDFDocument, for orientation lookup
   openPanel(`
     <div class="panel-head"><h3>${t("tools.rotate")}</h3></div>
     <div class="panel-body compact no-auto-layout tool-workspace tool-app-shell page-workspace" id="rotateBody">
@@ -946,7 +1019,7 @@ TOOLS.rotate = function(){
         <p class="tool-hero-desc">${t("toolRotate.heroDesc")}</p>
       </div>
       <div class="tool-upload-wrap" id="rotateUploadWrap">
-        ${fileInputHTML("application/pdf", false, t("toolSplit.selectPdfFile"))}
+        ${fileInputHTML("application/pdf", true, t("toolSplit.selectPdfFile"))}
       </div>
       <div class="tool-app-workspace" id="rotateWorkspace" style="display:none">
         <div class="tool-main-pane">
@@ -955,8 +1028,16 @@ TOOLS.rotate = function(){
         </div>
         <aside class="tool-side-panel">
           <div id="rotateFileSlot"></div>
+          <p class="mode-info">${t("toolRotate.multiFileNote")}</p>
           <div class="field"><label for="deg">${t("toolRotate.rotationLabel")}</label>
             <select id="deg"><option value="90">${t("toolRotate.deg90")}</option><option value="180">${t("toolRotate.deg180")}</option><option value="270">${t("toolRotate.deg270")}</option></select>
+          </div>
+          <div class="field"><label for="rotFilter">${t("toolRotate.filterLabel")}</label>
+            <select id="rotFilter">
+              <option value="all" selected>${t("toolRotate.filterAll")}</option>
+              <option value="portrait">${t("toolRotate.filterPortrait")}</option>
+              <option value="landscape">${t("toolRotate.filterLandscape")}</option>
+            </select>
           </div>
           <button type="button" class="btn secondary" id="rotAll">${t("toolRotate.applyBtn")}</button>
           <button class="btn tool-toolbar-primary" id="go">${t("tools.rotate")}</button>
@@ -983,68 +1064,160 @@ TOOLS.rotate = function(){
     body.classList.add("is-loaded");
   }
 
+  function resetRotateState(){
+    loadToken++;
+    gridApi?.destroy(); gridApi=null;
+    visibleFiles=[]; srcDocs = new Map();
+    document.getElementById("pageGrid").innerHTML="";
+    gridHint.style.display="none";
+    showEmptyState();
+  }
+
   wireDropzone(async fs=>{
     // See Split PDF's identical guard for why: a newer pick (or removal)
     // while this one's arrayBuffer()/buildPageGrid() is still in flight
     // must not let this stale run overwrite it.
     const myToken = ++loadToken;
-    gridApi?.destroy(); gridApi=null;
-    file=fs[0];
-    renderFileList([file], ()=>{
-      loadToken++;
-      gridApi?.destroy(); file=null; gridApi=null;
-      document.getElementById("pageGrid").innerHTML="";
-      gridHint.style.display="none";
-      showEmptyState();
-    });
-    fileSlot.appendChild(document.getElementById("flist"));
-    const bytes = await file.arrayBuffer();
-    if(myToken !== loadToken) return;
-    gridHint.style.display="block";
-    // zoomable dropped - Rotate's own S/M/L size toggle was the one
-    // thing making its workspace look like a separate tool instead of
-    // the standard Reorder/Organize/Delete page-grid; every other
-    // page-management tool just uses the shared default (zoom-m) size,
-    // so Rotate now does too. removable:true adds the same per-card ✕
-    // Delete Pages already uses (see appendCard()'s own comment - the
-    // mode:"select"+removable combination was already made to work
-    // there, so this needs no further changes to buildPageGrid itself).
-    const builtGridApi = await buildPageGrid(document.getElementById("pageGrid"), bytes, {mode:"select", rotatable:true, removable:true});
-    if(myToken !== loadToken){ builtGridApi.destroy(); return; }
-    gridApi = builtGridApi;
-    showWorkspace();
+    const pdfs = fs.filter(f=>f.type==="application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+    if(!pdfs.length) return;
+    // First upload builds the grid from all sources at once; later
+    // uploads append via addSource() so existing rotations/selections
+    // are never disturbed. renderFileList's remove callback gets the
+    // index into the VISIBLE list, which is exactly what removeVisible
+    // below expects (docIndex stays stable via the stored entry).
+    const removeVisible = (visibleIdx)=>{
+      const entry = visibleFiles[visibleIdx];
+      if(!entry) return;
+      gridApi && gridApi.removeSource(entry.docIndex);
+      srcDocs.delete(entry.docIndex);
+      visibleFiles.splice(visibleIdx, 1);
+      if(visibleFiles.length===0){ resetRotateState(); return; }
+      renderFileList(visibleFiles.map(v=>v.file), removeVisible);
+      fileSlot.appendChild(document.getElementById("flist"));
+    };
+    if(!gridApi){
+      gridApi?.destroy(); gridApi=null;
+      visibleFiles = pdfs.map((file, i)=>({file, docIndex:i}));
+      renderFileList(visibleFiles.map(v=>v.file), removeVisible);
+      fileSlot.appendChild(document.getElementById("flist"));
+      const sources = [];
+      for(const entry of visibleFiles){
+        const bytes = await entry.file.arrayBuffer();
+        if(myToken !== loadToken) return;
+        sources.push({bytes, color:null});
+        srcDocs.set(entry.docIndex, await loadPdfSafe(bytes.slice(0)));
+      }
+      if(myToken !== loadToken) return;
+      gridHint.style.display="block";
+      // zoomable dropped - Rotate's own S/M/L size toggle was the one
+      // thing making its workspace look like a separate tool instead of
+      // the standard Reorder/Organize/Delete page-grid; every other
+      // page-management tool just uses the shared default (zoom-m) size,
+      // so Rotate now does too. removable:true adds the same per-card ✕
+      // Delete Pages already uses (see appendCard()'s own comment - the
+      // mode:"select"+removable combination was already made to work
+      // there, so this needs no further changes to buildPageGrid itself).
+      // Multi-source grids are Organize's proven shape (docIndex per
+      // card); mode:"select" + multi-source is orthogonal - selection,
+      // rotation and removal all operate per card.
+      const builtGridApi = await buildPageGrid(document.getElementById("pageGrid"), sources, {mode:"select", rotatable:true, removable:true});
+      if(myToken !== loadToken){ builtGridApi.destroy(); return; }
+      gridApi = builtGridApi;
+      showWorkspace();
+    } else {
+      for(const f of pdfs){
+        const bytes = await f.arrayBuffer();
+        if(myToken !== loadToken) return;
+        const docIndex = visibleFiles.length ? Math.max(...visibleFiles.map(v=>v.docIndex))+1 : 0;
+        visibleFiles.push({file:f, docIndex});
+        srcDocs.set(docIndex, await loadPdfSafe(bytes.slice(0)));
+        await gridApi.addSource(bytes, null);
+      }
+      renderFileList(visibleFiles.map(v=>v.file), removeVisible);
+      fileSlot.appendChild(document.getElementById("flist"));
+    }
   });
-  document.getElementById("rotAll").addEventListener("click", ()=>{
+  document.getElementById("rotAll").addEventListener("click", async ()=>{
     if(!gridApi) return;
     const deg = parseInt(document.getElementById("deg").value);
+    const filter = document.getElementById("rotFilter").value;
     // Honor the grid's own selection, matching what the hint text above
     // already promises ("select several pages and use 'Apply to
     // selected/all' below") - rotateAll() unconditionally hits every
     // page regardless of selection, which silently contradicted that
-    // promise before this fix.
-    if(gridApi.getSelected().size > 0) gridApi.rotateSelected(deg);
-    else gridApi.rotateAll(deg);
+    // promise before this fix. The orientation filter narrows the same
+    // set: only pages whose source orientation matches are rotated.
+    // gridApi exposes no per-card rotate, so the target set is selected
+    // temporarily (selection state is the card's own .selected class +
+    // aria-pressed - see buildPageGrid's wireCard), rotated via
+    // rotateSelected(), and the previous selection is restored exactly.
+    const cards = [...document.querySelectorAll("#pageGrid .page-card")];
+    const savedSelected = new Set(cards.filter(c=>c.classList.contains("selected")));
+    let targets = cards;
+    if(filter!=="all"){
+      targets = [];
+      for(const card of cards){
+        const docIdx = parseInt(card.dataset.docIndex||"0");
+        const src = srcDocs.get(docIdx);
+        if(!src) continue;
+        const page = src.getPage(parseInt(card.dataset.page));
+        const {width, height} = page.getSize();
+        const orient = classifyPageOrientation(width, height, page.getRotation().angle);
+        if(orient===filter) targets.push(card);
+      }
+    }
+    if(savedSelected.size>0) targets = targets.filter(c=>savedSelected.has(c));
+    if(!targets.length) return;
+    const setSelected = (card, on)=>{
+      card.classList.toggle("selected", on);
+      card.setAttribute("aria-pressed", String(on));
+    };
+    cards.forEach(c=>setSelected(c, false));
+    targets.forEach(c=>setSelected(c, true));
+    gridApi.rotateSelected(deg);
+    cards.forEach(c=>setSelected(c, savedSelected.has(c)));
   });
   document.getElementById("go").addEventListener("click", withToolOperation(document.getElementById("go"), async (_event, operation)=>{
     const out=document.getElementById("out"); out.innerHTML=statusEl(t("toolRotate.statusRotating"));
-    const bytes=await file.arrayBuffer();
-    const src=await loadPdfSafe(bytes);
     const pagesSpec = gridApi.getPages();
     // Rotate's ✕ is new (removable:true, added alongside the rest of
     // this phase's grid standardization) - same "don't let every page
     // get deleted out from under the export" guard Organize/Delete
     // Pages already use.
     if(pagesSpec.length===0){ toast(t("toolRotate.errAtLeastOne")); out.innerHTML=""; return; }
-    const newDoc = await buildPdfFromPages(src, pagesSpec);
-    const outBytes=await newDoc.save();
-    const blob=new Blob([outBytes],{type:"application/pdf"});
-    const outName = suffixedName(file, "rotated", "pdf");
+    // Group the grid spec by source file, in upload order; a file whose
+    // pages were all removed from the grid produces no output file.
+    const outputs = [];
+    for(const entry of visibleFiles){
+      const spec = pagesSpec.filter(p=>(p.docIndex||0)===entry.docIndex);
+      if(!spec.length) continue;
+      const bytes = await entry.file.arrayBuffer();
+      const src = await loadPdfSafe(bytes);
+      const newDoc = await buildPdfFromPages(src, spec);
+      outputs.push({file: entry.file, bytes: await newDoc.save()});
+    }
+    if(outputs.length===0){ toast(t("toolRotate.errAtLeastOne")); out.innerHTML=""; return; }
+    if(outputs.length===1){
+      const blob=new Blob([outputs[0].bytes],{type:"application/pdf"});
+      const outName = suffixedName(outputs[0].file, "rotated", "pdf");
+      if(!operation.isCurrent()) return;
+      const {url}=downloadBlob(blob,outName);
+      const {canvas}=await pdfThumb(outputs[0].bytes);
+      setStatus(t("workspace.done"),true);
+      if(!operation.isCurrent()) return;
+      out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:canvas, url, filename:outName}));
+      return;
+    }
+    await ensureJSZip();
+    const zip = new JSZip();
+    for(const o of outputs) zip.file(suffixedName(o.file, "rotated", "pdf"), o.bytes);
+    const zipBlob = await zip.generateAsync({type:"blob"});
+    const outName = "rotated_pdfs.zip";
     if(!operation.isCurrent()) return;
-    const {url}=downloadBlob(blob,outName);
-    const {canvas}=await pdfThumb(outBytes);
-    setStatus(t("workspace.done"),true);
+    const {url}=downloadBlob(zipBlob,outName);
+    setStatus(t("toolRotate.doneFiles",{n:outputs.length}), true);
     if(!operation.isCurrent()) return;
-    out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:canvas, url, filename:outName}));
+    out.appendChild(resultBox({sizeText:fmtSize(zipBlob.size), sizeGood:true, url, filename:outName}));
   }));
 };
 
@@ -1261,6 +1434,7 @@ function parsePageRangeInput(str, maxPage){
    handling (via a genuine card.click(), not a class toggled from
    outside) - buildPageGrid()/wirePageGridDrag() are not modified at all. */
 TOOLS.extractpages = function(){
+  const t = window.I18N ? I18N.t : (k)=>k;
   let file=null, gridApi=null, loadToken=0, totalPages=0;
   // Set only while applyWantedSelection() is programmatically clicking
   // cards to match a typed range - without this, each of those clicks
@@ -1295,6 +1469,7 @@ TOOLS.extractpages = function(){
             <button class="btn secondary btn-sm" id="extractSelectAll" type="button" style="flex:1">Select all</button>
             <button class="btn secondary btn-sm" id="extractClearSel" type="button" style="flex:1">Clear</button>
           </div>
+          <label class="checkbox-row"><input type="checkbox" id="extractSeparateChk"> ${t("toolExtract.separateFilesChk")}</label>
           <button class="btn tool-toolbar-primary" id="go" disabled>Extract Pages</button>
         </aside>
       </div>
@@ -1401,16 +1576,39 @@ TOOLS.extractpages = function(){
     // reorders cards, so no extra sort is needed.
     const selectedPages = gridApi.getSelectedPages();
     if(selectedPages.length===0){ toast("Select at least one page to keep"); out.innerHTML=""; return; }
-    const newDoc = await buildPdfFromPages(doc, selectedPages);
-    const outBytes = await newDoc.save();
-    const blob=new Blob([outBytes],{type:"application/pdf"});
-    const outName = suffixedName(file, "extracted", "pdf");
+    // Separate-files toggle (default off): one group per selected page,
+    // reusing Split's pure grouping helper - same one-group-per-page
+    // contract, so the two tools can never drift apart.
+    const separateFiles = document.getElementById("extractSeparateChk").checked && selectedPages.length>1;
+    const groups = separateFiles
+      ? splitPageGroups(selectedPages.map(p=>p.index), new Map(selectedPages.map(p=>[p.index, p.rotation])), false)
+      : [selectedPages];
+    if(!separateFiles){
+      const newDoc = await buildPdfFromPages(doc, selectedPages);
+      const outBytes = await newDoc.save();
+      const blob=new Blob([outBytes],{type:"application/pdf"});
+      const outName = suffixedName(file, "extracted", "pdf");
+      if(!operation.isCurrent()) return;
+      const {url}=downloadBlob(blob,outName);
+      const {canvas}=await pdfThumb(outBytes);
+      setStatus("Done", true);
+      if(!operation.isCurrent()) return;
+      out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:canvas, url, filename:outName}));
+      return;
+    }
+    await ensureJSZip();
+    const zip = new JSZip();
+    for(let i=0;i<groups.length;i++){
+      const partDoc = await buildPdfFromPages(doc, groups[i]);
+      zip.file(`page_${groups[i][0].index+1}.pdf`, await partDoc.save());
+    }
+    const zipBlob = await zip.generateAsync({type:"blob"});
+    const outName = suffixedName(file, "extracted_parts", "zip");
     if(!operation.isCurrent()) return;
-    const {url}=downloadBlob(blob,outName);
-    const {canvas}=await pdfThumb(outBytes);
-    setStatus("Done", true);
+    const {url}=downloadBlob(zipBlob,outName);
+    setStatus(t("toolExtract.doneSeparateFiles",{n:groups.length}), true);
     if(!operation.isCurrent()) return;
-    out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:canvas, url, filename:outName}));
+    out.appendChild(resultBox({sizeText:fmtSize(zipBlob.size), sizeGood:true, url, filename:outName}));
   }));
 };
 
@@ -1634,7 +1832,22 @@ TOOLS.addblank = function(){
    has startNumber folded in by the caller (the Nth page actually being
    numbered, not its raw position in the document - front matter before
    the numbering range doesn't shift what "start at 5" means). */
-function pageNumberText(format, displayNum, totalPages){
+function pageNumberText(format, displayNum, totalPages, opts){
+  const o = opts || {};
+  if(format==="custom"){
+    const template = (o.customTemplate || "").trim();
+    if(template){
+      // Tokens: {n} displayed number, {p} total pages in the document,
+      // {r} pages actually numbered, {rf} last number shown (start +
+      // count - 1). Unknown {…} sequences are left untouched. split/join
+      // (not a regex) so template text can never be misread as a pattern.
+      return template.split("{n}").join(String(displayNum))
+        .split("{p}").join(String(o.totalPagesInDoc ?? totalPages))
+        .split("{r}").join(String(o.rangeTotal ?? totalPages))
+        .split("{rf}").join(String(o.rangeTotalFromFirst ?? totalPages));
+    }
+    // Empty custom template falls back to the default preset below.
+  }
   switch(format){
     case "n": return `${displayNum}`;
     case "page-n": return `Page ${displayNum}`;
@@ -1642,7 +1855,36 @@ function pageNumberText(format, displayNum, totalPages){
     default: return `${displayNum} / ${totalPages}`; // "n-of-total"
   }
 }
+/* Font choices for Page Numbers (and Header & Footer's own copy in
+   pdf-page-tools-2.js - the two tools load in different runtime
+   profiles, so the list is deliberately duplicated rather than shared
+   through pdf-canvas-widgets.js). Values are pdf-lib StandardFonts enum
+   KEYS; the canvas preview uses the paired CSS font stack. */
+const PAGE_STAMP_FONTS = [
+  {key:"Helvetica", label:"Helvetica", css:"Helvetica, Arial, sans-serif"},
+  {key:"HelveticaBold", label:"Helvetica Bold", css:"bold Helvetica, Arial, sans-serif"},
+  {key:"TimesRoman", label:"Times Roman", css:"'Times New Roman', Times, serif"},
+  {key:"Courier", label:"Courier", css:"'Courier New', Courier, monospace"},
+];
+function pageStampFontCss(key){
+  return (PAGE_STAMP_FONTS.find(f=>f.key===key) || PAGE_STAMP_FONTS[0]).css;
+}
+function pageStampStandardFont(key){
+  return PAGE_STAMP_FONTS.some(f=>f.key===key) ? key : "Helvetica";
+}
+function pageStampFontOptions(selectedKey){
+  return PAGE_STAMP_FONTS.map(f=>`<option value="${f.key}"${f.key===selectedKey?" selected":""}>${f.label}</option>`).join("");
+}
+/* "#rrggbb" -> pdf-lib rgb(); anything malformed returns the fallback
+   instead of throwing inside the export handler. */
+function hexToPdfRgb(hex, fallback){
+  const m = /^#([0-9a-f]{6})$/i.exec((hex || "").trim());
+  if(!m) return fallback;
+  const n = parseInt(m[1], 16);
+  return rgb(((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255);
+}
 TOOLS.pagenumbers = function(){
+  const t = window.I18N ? I18N.t : (k)=>k;
   let file=null, pdoc=null, loadToken=0;
   openPanel(`
     <div class="panel-head"><h3>Add Page Numbers</h3></div>
@@ -1681,7 +1923,13 @@ TOOLS.pagenumbers = function(){
               <option value="n">1</option>
               <option value="page-n">Page 1</option>
               <option value="page-n-of-total">Page 1 of 10</option>
+              <option value="custom">${t("toolPageNumbers.formatCustom")}</option>
             </select>
+          </div>
+          <div class="field" id="pnCustomRow" hidden><label for="pncustom">${t("toolPageNumbers.customTextLabel")}</label><input type="text" id="pncustom" placeholder="${t("toolPageNumbers.customTextPlaceholder")}"></div>
+          <div class="row">
+            <div class="field" style="margin:0"><label for="pnfont">${t("toolPageNumbers.fontLabel")}</label><select id="pnfont">${pageStampFontOptions("Helvetica")}</select></div>
+            <div class="field" style="margin:0"><label for="pncolor">${t("toolPageNumbers.colorLabel")}</label><input type="color" id="pncolor" value="#333333"></div>
           </div>
           <div class="row">
             <div class="field" style="margin:0"><label for="pnstart">Start at</label><input type="number" id="pnstart" value="1" min="1"></div>
@@ -1727,6 +1975,9 @@ TOOLS.pagenumbers = function(){
     return {
       vAlign, hAlign,
       format: document.getElementById("pnformat").value,
+      customTemplate: document.getElementById("pncustom").value,
+      fontName: pageStampStandardFont(document.getElementById("pnfont").value),
+      colorHex: document.getElementById("pncolor").value,
       startNumber: Math.max(1, parseInt(document.getElementById("pnstart").value) || 1),
       fontSize: Math.max(6, parseInt(document.getElementById("pnsize").value) || 10),
     };
@@ -1743,10 +1994,15 @@ TOOLS.pagenumbers = function(){
     goBtn.disabled = false;
   }
   function redrawPreview(){
+    // The custom-text row is only meaningful for the Custom format -
+    // toggled here (not in a separate listener) so it stays correct on
+    // every redraw, including the first one after a file loads.
+    const customRow = document.getElementById("pnCustomRow");
+    if(customRow) customRow.hidden = document.getElementById("pnformat").value!=="custom";
     if(!pageBgImageData) return;
     const ctx = canvas.getContext("2d");
     ctx.putImageData(pageBgImageData, 0, 0);
-    const {vAlign, hAlign, format, startNumber, fontSize} = currentSettings();
+    const {vAlign, hAlign, format, customTemplate, fontName, colorHex, startNumber, fontSize} = currentSettings();
     // Page 1's own displayed number: startNumber, UNLESS an explicit page
     // range is given and page 1 isn't in it - then show the number it
     // would actually get based on its position among the numbered pages
@@ -1767,10 +2023,10 @@ TOOLS.pagenumbers = function(){
     // "of 5" would make page 2 read "6 of 5", which is nonsense).
     const numberedCount = targetIndices ? targetIndices.length : totalPages;
     const lastDisplayNum = startNumber + numberedCount - 1;
-    const text = pageNumberText(format, displayNum, lastDisplayNum);
+    const text = pageNumberText(format, displayNum, lastDisplayNum, {customTemplate, rangeTotal:numberedCount, rangeTotalFromFirst:lastDisplayNum, totalPagesInDoc:totalPages});
     const scaledSize = fontSize * dispScale;
-    ctx.font = `${scaledSize}px Helvetica, Arial, sans-serif`;
-    ctx.fillStyle = "rgb(51,51,51)";
+    ctx.font = `${scaledSize}px ${pageStampFontCss(fontName)}`;
+    ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(colorHex||"") ? colorHex : "#333333";
     ctx.textBaseline = "alphabetic";
     const tw = ctx.measureText(text).width / dispScale;
     const x = headerFooterAnchor(hAlign, page1Size.width, tw, MARGIN_X) * dispScale;
@@ -1781,7 +2037,7 @@ TOOLS.pagenumbers = function(){
     const y = vAlign==="top" ? MARGIN_Y * dispScale : canvas.height - MARGIN_Y * dispScale;
     ctx.fillText(text, x, y);
   }
-  ["pnpos","pnformat","pnstart","pnsize"].forEach(id=>{
+  ["pnpos","pnformat","pnstart","pnsize","pncustom","pnfont","pncolor"].forEach(id=>{
     document.getElementById(id).addEventListener("input", redrawPreview);
   });
   document.getElementById("pnpages").addEventListener("input", ()=>{ validate(); redrawPreview(); });
@@ -1823,11 +2079,12 @@ TOOLS.pagenumbers = function(){
 
   goBtn.addEventListener("click", withToolOperation(goBtn, async (_event, operation)=>{
     const out=document.getElementById("out"); out.innerHTML=statusEl(T("workspace.statusReadingPdf"));
-    const {vAlign, hAlign, format, startNumber, fontSize} = currentSettings();
+    const {vAlign, hAlign, format, customTemplate, fontName, colorHex, startNumber, fontSize} = currentSettings();
     const pagesRaw = document.getElementById("pnpages").value.trim();
     const bytes=await file.arrayBuffer();
     const doc=await loadPdfSafe(bytes);
-    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const font = await doc.embedFont(StandardFonts[fontName]);
+    const stampColor = hexToPdfRgb(colorHex, rgb(0.2,0.2,0.2));
     const pages = doc.getPages();
     const targetIndices = pagesRaw ? parsePageList(pagesRaw, pages.length) : null;
     // Same "of Total" fix as the preview above - the last number actually
@@ -1840,12 +2097,12 @@ TOOLS.pagenumbers = function(){
       if(targetIndices && !targetIndices.includes(i)) return;
       const displayNum = startNumber + counter;
       counter++;
-      const text = pageNumberText(format, displayNum, totalForFormat);
+      const text = pageNumberText(format, displayNum, totalForFormat, {customTemplate, rangeTotal:numberedCount, rangeTotalFromFirst:totalForFormat, totalPagesInDoc:pages.length});
       const {width, height} = p.getSize();
       const tw = font.widthOfTextAtSize(text, fontSize);
       const x = headerFooterAnchor(hAlign, width, tw, MARGIN_X);
       const y = vAlign==="top" ? height-MARGIN_Y : MARGIN_Y;
-      p.drawText(text, {x, y, size:fontSize, font, color:rgb(0.2,0.2,0.2)});
+      p.drawText(text, {x, y, size:fontSize, font, color:stampColor});
     });
     const outBytes=await doc.save();
     const blob=new Blob([outBytes],{type:"application/pdf"});
@@ -1871,6 +2128,27 @@ TOOLS.pagenumbers = function(){
    applied - matches how pdf-lib's own rotate:degrees(...) pivots
    drawText around that same anchor, so a corner placement rotates in
    place exactly the same way on screen and in the exported file. */
+/* Pure grouping for Split's Pages mode and Extract Pages' separate-files
+   toggle: mergeOutput=false means one group per page (each group becomes
+   its own file); true means a single group holding every page. Indices
+   absent from liveIndexRotation (pages the user removed from the grid)
+   are dropped, and each entry keeps its grid rotation. Pure (no DOM) so
+   the grouping contract is unit-testable - see tests/parity-page-tools.test.js. */
+function splitPageGroups(pageIndices, liveIndexRotation, mergeOutput){
+  const kept = pageIndices.filter(i=>!liveIndexRotation || liveIndexRotation.has(i));
+  if(mergeOutput) return [kept.map(index=>({index, rotation:liveIndexRotation ? (liveIndexRotation.get(index) ?? 0) : 0}))];
+  return kept.map(index=>[{index, rotation:liveIndexRotation ? (liveIndexRotation.get(index) ?? 0) : 0}]);
+}
+/* Classifies a page's orientation from its effective (rotation-aware)
+   dimensions: a page rotated 90°/270° swaps width and height. Square
+   pages (width === height) count as portrait. Pure, unit-tested. */
+function classifyPageOrientation(width, height, rotationDeg){
+  const rot = ((rotationDeg || 0) % 360 + 360) % 360;
+  const swapped = rot===90 || rot===270;
+  const w = swapped ? height : width;
+  const h = swapped ? width : height;
+  return w > h ? "landscape" : "portrait";
+}
 /* Shared page-range parser: 1-based comma list + ranges ("1,3-5"),
    returns 0-based indices or null on empty/invalid input. Was duplicated
    locally in Split and Watermark (2 copies, same ~15 lines) - promoted

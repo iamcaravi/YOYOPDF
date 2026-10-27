@@ -10,7 +10,7 @@
     "ogImage": "https://yoyopdf.com/assets/og/yoyopdf-default-og.png",
     "logo": "https://yoyopdf.com/assets/icons/yoyopdf-logo.png",
     "sameAs": [],
-    "lastmod": "2026-09-20"
+    "lastmod": "2026-10-27"
   },
   "categories": {
     "organize": {
@@ -974,7 +974,7 @@
       "faqs": [
         {
           "q": "How strong is the encryption?",
-          "a": "Protect PDF uses the PDF format's original Standard Security Handler (40-bit RC4). It's suitable as basic access control, not as strong confidentiality for highly sensitive documents."
+          "a": "Protect PDF encrypts with AES-256 by default (Standard Security Handler R=6), with a separate permissions password if you set one. A legacy 40-bit RC4 option is also available for old readers, but it is not strong confidentiality for highly sensitive documents."
         },
         {
           "q": "Is my file uploaded to encrypt it?",

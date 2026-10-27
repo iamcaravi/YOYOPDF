@@ -166,12 +166,16 @@ function computeObjectKey(fileKeyBytes, objNum, genNum){
   return md5(concat).subarray(0, keyLen);
 }
 /** Permission bits (Table 22) - revision-2-compatible: bits 1-2 must be 0, bits 7-32 must be 1. */
-function computePermissionsInt({print=true, modify=true, copy=true, annotate=true}={}){
+function computePermissionsInt({print=true, modify=true, copy=true, annotate=true, fillForms=true, extractAccessibility=true, assemble=true, printHighRes=true}={}){
   let p = 0xFFFFFFFC; // all 1s except bit1/bit2
   if(!print) p &= ~(1<<2);    // bit position 3
   if(!modify) p &= ~(1<<3);   // bit position 4
   if(!copy) p &= ~(1<<4);     // bit position 5
   if(!annotate) p &= ~(1<<5); // bit position 6
+  if(!fillForms) p &= ~(1<<8);            // bit position 9
+  if(!extractAccessibility) p &= ~(1<<9); // bit position 10
+  if(!assemble) p &= ~(1<<10);            // bit position 11
+  if(!printHighRes) p &= ~(1<<11);        // bit position 12
   return p|0; // signed 32-bit, as written into the PDF integer
 }
 
@@ -383,11 +387,24 @@ function readOriginalTrailer(bin){
 function readExistingEncryptDict(bin){
   let trailer;
   try{ trailer = readOriginalTrailer(bin); } catch(e){ return null; }
-  const encM = /\/Encrypt\s+(?:(\d+)\s+(\d+)\s+R|(<<[\s\S]*?>>))/.exec(trailer.dictText);
+  const encM = /\/Encrypt\s+(?:(\d+)\s+(\d+)\s+R|(<<))/.exec(trailer.dictText);
   if(!encM) return null;
   let dictText;
   if(encM[3]){
-    dictText = encM[3];
+    // Direct dict - it can itself contain a NESTED <<...>> dict (the /CF
+    // crypt-filter dict an R=6 file writes), so a lazy `<<...>>` regex
+    // would truncate at the inner dict's close. Balanced-scan instead,
+    // the same way readOriginalTrailer reads the trailer itself.
+    const start = encM.index + encM[0].length - 2;
+    const src = trailer.dictText;
+    let depth=0, i=start, closeIdx=-1;
+    while(i<src.length-1){
+      if(src[i]==="<" && src[i+1]==="<"){ depth++; i+=2; continue; }
+      if(src[i]===">" && src[i+1]===">"){ depth--; i+=2; if(depth===0){ closeIdx=i-2; break; } continue; }
+      i++;
+    }
+    if(closeIdx===-1) return null;
+    dictText = trailer.dictText.slice(start+2, closeIdx);
   } else {
     const objs = findIndirectObjects(bin);
     const target = objs.find(o=>o.num===parseInt(encM[1],10) && o.gen===parseInt(encM[2],10));
@@ -400,7 +417,9 @@ function readExistingEncryptDict(bin){
   const pM = /\/P\s+(-?\d+)/.exec(dictText);
   const oM = /\/O\s*(\([\s\S]*?[^\\]\)|<[0-9A-Fa-f\s]*>)/.exec(dictText);
   const uM = /\/U\s*(\([\s\S]*?[^\\]\)|<[0-9A-Fa-f\s]*>)/.exec(dictText);
-  if(!filterM || filterM[1]!=="Standard" || !vM || !rM || !pM || !oM || !uM || !trailer.idHex) return null;
+  const oeM = /\/OE\s*(\([\s\S]*?[^\\]\)|<[0-9A-Fa-f\s]*>)/.exec(dictText);
+  const ueM = /\/UE\s*(\([\s\S]*?[^\\]\)|<[0-9A-Fa-f\s]*>)/.exec(dictText);
+  if(!filterM || filterM[1]!=="Standard" || !vM || !rM || !pM || !oM || !uM) return null;
   function decodeStringToken(tok){
     if(tok[0]==="<") return parseHexStringBin(tok, 0).bytes;
     return parseLiteralStringBin(tok, 0).bytes;
@@ -408,7 +427,12 @@ function readExistingEncryptDict(bin){
   return {
     V: parseInt(vM[1],10), R: parseInt(rM[1],10), P: parseInt(pM[1],10),
     O: decodeStringToken(oM[1]), U: decodeStringToken(uM[1]),
-    idBytes: hexPairsToBytes(trailer.idHex),
+    OE: oeM ? decodeStringToken(oeM[1]) : null,
+    UE: ueM ? decodeStringToken(ueM[1]) : null,
+    // R=5/R=6 key derivation never uses the file ID; R=2 does. An
+    // ID-less file is therefore still readable here, and the R=2 path
+    // below rejects it explicitly instead of crashing on undefined.
+    idBytes: trailer.idHex ? hexPairsToBytes(trailer.idHex) : null,
     trailer,
   };
 }
@@ -457,7 +481,11 @@ function rebuildPdfWithTransform(pdfBytes, fileKey, trailerFields){
  * @returns {Uint8Array}
  */
 function encryptPdfBytes(pdfBytes, {userPassword, ownerPassword, permissions}={}){
-  if(!userPassword) throw new Error("An open password is required");
+  // An EMPTY user password is valid (a permissions-only file: it opens
+  // without a password but carries restrictions); only a missing
+  // password argument is an error. Callers validate that at least one
+  // of the user/owner passwords is set.
+  if(userPassword === undefined || userPassword === null) throw new Error("A password is required");
   const userPwBytes = pdfLatin1Bytes(userPassword);
   const ownerPwBytes = pdfLatin1Bytes(ownerPassword || userPassword);
   const idBytes = crypto.getRandomValues(new Uint8Array(16));
@@ -492,7 +520,7 @@ function tryDecryptSimplePdfBytes(pdfBytes, password){
   try{
     const bin = bytesToBinaryString(pdfBytes);
     const enc = readExistingEncryptDict(bin);
-    if(!enc || enc.V!==1 || enc.R!==2) return {notSimple:true};
+    if(!enc || enc.V!==1 || enc.R!==2 || !enc.idBytes) return {notSimple:true};
     const pwBytes = pdfLatin1Bytes(password || "");
     let fileKey = computeFileKey(pwBytes, enc.O, enc.P, enc.idBytes);
     if(bytesToHexPdfString(computeU(fileKey)) !== bytesToHexPdfString(enc.U)){
@@ -508,6 +536,356 @@ function tryDecryptSimplePdfBytes(pdfBytes, password){
     const trailerFields = `/Root ${enc.trailer.rootRef}` + (enc.trailer.infoRef ? ` /Info ${enc.trailer.infoRef}` : "")
       + ` /ID [${bytesToHexPdfString(enc.idBytes)} ${bytesToHexPdfString(enc.idBytes)}]`;
     return { bytes: rebuildPdfWithTransform(pdfBytes, fileKey, trailerFields) };
+  }catch(e){
+    return {notSimple:true};
+  }
+}
+
+/* ---------------- Standard Security Handler, Revisions 5/6 (AES-256, V=5) ----------------
+   ISO 32000-2 Section 7.6.4.3. Protect PDF's DEFAULT since the parity
+   fixes (the R=2/40-bit RC4 path above is kept only as an explicit
+   "Legacy compatibility" opt-in): AES-256, Security Handler revision 6
+   (revision 5 uses the same entry layout with a plain SHA-256 hash
+   instead of the iterative one, and is accepted on the decrypt path).
+
+   Every algorithmic choice below was verified empirically against
+   pdf.js 3.11.174 (the same build this app ships): a file produced by
+   encryptPdfBytesAES256() opens in pdf.js with the user password AND
+   with the owner password, rejects wrong/empty passwords, preserves
+   text and metadata byte-for-byte through decryption, and a
+   permissions-only file (empty user password) opens with no password
+   at all. Two details that are easy to get wrong, confirmed by reading
+   pdf.js's own CipherTransformFactory/PDF20 source in node_modules:
+   (1) the owner-password hash and the OE key take the FULL 48-byte U
+   entry as their "user key" input, not just its 32-byte hash portion;
+   (2) AESV3 encrypts strings AND streams directly with the 32-byte
+   file key (AES-256-CBC, random 16-byte IV prepended, PKCS#7 padding)
+   - there are NO per-object keys and no "sAlT" salt for V=5, unlike
+   the V<=4 handlers. (pdf.js's AESV3 branch is literally
+   `new AES256Cipher(key)` with the file key.)
+
+   Scope/known limitations (by design):
+   - WebCrypto only (crypto.subtle): AES-CBC and SHA-256/384/512 are
+     used directly. In a non-secure context subtle is unavailable and
+     these functions throw a descriptive error so the caller can offer
+     the legacy path instead of silently producing a weak file. Key
+     import happens once per file, not once per object.
+   - Password bytes are the UTF-8 encoding truncated to 127 bytes
+     (SASLprep normalization is skipped: ASCII passwords - the
+     overwhelmingly common case - are unaffected, and a password
+     round-trips through this app's own encrypt/decrypt since both
+     sides use the same encoding).
+   - Like the R=2 path, only classic xref-table PDFs are handled;
+     callers must pass bytes saved with `{useObjectStreams:false}`.
+   - WebCrypto's AES-CBC always applies PKCS#7 padding, but Algorithm
+     2.B, UE/OE and Perms need RAW (unpadded) CBC. Their inputs are
+     always block-aligned, so encryption truncates the one extra
+     padding block WebCrypto appends, and decryption appends one
+     synthetic block that decrypts to a valid padding block (see
+     r6DecryptRawBlock) so WebCrypto's padding strip returns exactly
+     the raw plaintext. Object strings/streams DO use padding (per
+     the AESV3 spec) and go through the plain WebCrypto calls. */
+
+function r6GetSubtle(){
+  const subtle = (typeof globalThis !== "undefined" ? globalThis.crypto : undefined)?.subtle
+    || (typeof crypto !== "undefined" ? crypto.subtle : undefined);
+  if(!subtle) throw new Error("AES-256 encryption needs WebCrypto (a secure HTTPS/local context). Use the legacy compatibility option instead.");
+  return subtle;
+}
+function r6Concat(...arrs){
+  const out = new Uint8Array(arrs.reduce((n, a) => n + a.length, 0));
+  let off = 0;
+  for(const a of arrs){ out.set(a, off); off += a.length; }
+  return out;
+}
+function r6BytesEqual(a, b){
+  if(!a || !b || a.length !== b.length) return false;
+  for(let i=0;i<a.length;i++) if(a[i] !== b[i]) return false;
+  return true;
+}
+function r6RandomBytes(n){
+  const c = (typeof globalThis !== "undefined" && globalThis.crypto) || (typeof crypto !== "undefined" ? crypto : null);
+  if(!c || !c.getRandomValues) throw new Error("No secure random source is available.");
+  return c.getRandomValues(new Uint8Array(n));
+}
+function r6PasswordBytes(str){
+  // UTF-8, truncated to 127 bytes (ISO 32000-2 7.6.4.3.2).
+  return new TextEncoder().encode(str || "").subarray(0, 127);
+}
+async function r6Digest(algo, data){
+  return new Uint8Array(await r6GetSubtle().digest(algo, data));
+}
+async function r6ImportKey(rawBytes, usages){
+  return r6GetSubtle().importKey("raw", rawBytes, {name:"AES-CBC"}, false, usages);
+}
+async function r6EncryptRaw(key, iv, data){
+  // Raw CBC: data is block-aligned; drop the padding block WebCrypto appends.
+  const out = new Uint8Array(await r6GetSubtle().encrypt({name:"AES-CBC", iv}, key, data));
+  return out.subarray(0, data.length);
+}
+async function r6DecryptRaw(key, iv, data){
+  // Raw CBC decrypt via WebCrypto, which always strips PKCS#7 padding:
+  // append one synthetic block that decrypts to a full padding block
+  // (16 bytes of 0x10), so the strip removes exactly that block and
+  // returns the raw plaintext. Only valid for block-aligned input
+  // (UE/OE are always exactly 32 bytes).
+  if(data.length === 0 || data.length % 16 !== 0) throw new Error("Raw AES decryption needs block-aligned input.");
+  const padBlock = new Uint8Array(16).fill(16);
+  const lastBlock = data.subarray(data.length - 16);
+  const xPlain = new Uint8Array(16);
+  for(let i=0;i<16;i++) xPlain[i] = padBlock[i] ^ lastBlock[i];
+  const xCipher = await r6EncryptRaw(key, new Uint8Array(16), xPlain);
+  const padded = r6Concat(data, xCipher);
+  const out = new Uint8Array(await r6GetSubtle().decrypt({name:"AES-CBC", iv}, key, padded));
+  if(out.length !== data.length) throw new Error("Raw AES decryption produced an unexpected length.");
+  return out;
+}
+/** Algorithm 2.B (R=6 iterative hash); with iterative=false it is the plain SHA-256 hash R=5 uses. */
+async function r6IterativeHash(passwordBytes, saltBytes, userKeyBytes, iterative){
+  let k = await r6Digest("SHA-256", r6Concat(passwordBytes, saltBytes, userKeyBytes));
+  if(!iterative) return k.subarray(0, 32);
+  const subtle = r6GetSubtle();
+  let e = new Uint8Array([0]);
+  let round = 0;
+  while(round < 64 || e[e.length-1] > round - 32){
+    if(round > 4096) throw new Error("Password hashing did not converge.");
+    const combined = r6Concat(passwordBytes, k, userKeyBytes);
+    const k1 = new Uint8Array(combined.length * 64);
+    for(let j=0;j<64;j++) k1.set(combined, j * combined.length);
+    const aesKey = await subtle.importKey("raw", k.subarray(0, 16), {name:"AES-CBC"}, false, ["encrypt"]);
+    const enc = new Uint8Array(await subtle.encrypt({name:"AES-CBC", iv: k.subarray(16, 32)}, aesKey, k1));
+    // k1 is always a multiple of 16 bytes (64 repetitions), so the raw
+    // ciphertext is the output minus the one appended padding block.
+    e = enc.subarray(0, k1.length);
+    // The remainder is the SUM of the first 16 bytes mod 3 (which equals
+    // the big-endian-integer mod 3, since 256 == 1 mod 3) - pdf.js does
+    // the sum form; both agree.
+    let remainder = 0;
+    for(let i=0;i<16;i++) remainder = (remainder + e[i]) % 3;
+    k = remainder === 0 ? await r6Digest("SHA-256", e) : remainder === 1 ? await r6Digest("SHA-384", e) : await r6Digest("SHA-512", e);
+    round++;
+  }
+  return k.subarray(0, 32);
+}
+/** Verifies `password` against a parsed V=5 encrypt dict and recovers the file key. Returns null when the password matches neither the user nor the owner entry - never throws for a wrong password. */
+async function r6RecoverFileKey(passwordStr, enc){
+  const iterative = enc.R >= 6;
+  const pw = r6PasswordBytes(passwordStr);
+  if(!enc.U || enc.U.length !== 48 || !enc.O || enc.O.length !== 48 || !enc.UE || enc.UE.length !== 32 || !enc.OE || enc.OE.length !== 32) return null;
+  const uHash = enc.U.subarray(0, 32), uValSalt = enc.U.subarray(32, 40), uKeySalt = enc.U.subarray(40, 48);
+  const uCheck = await r6IterativeHash(pw, uValSalt, new Uint8Array(0), iterative);
+  if(r6BytesEqual(uCheck, uHash)){
+    const ueKey = await r6ImportKey(await r6IterativeHash(pw, uKeySalt, new Uint8Array(0), iterative), ["encrypt", "decrypt"]);
+    return {fileKey: await r6DecryptRaw(ueKey, new Uint8Array(16), enc.UE), viaOwner:false};
+  }
+  const oHash = enc.O.subarray(0, 32), oValSalt = enc.O.subarray(32, 40), oKeySalt = enc.O.subarray(40, 48);
+  // Owner hash and OE key use the FULL 48-byte U entry as user key (pdf.js PDF20).
+  const oCheck = await r6IterativeHash(pw, oValSalt, enc.U, iterative);
+  if(r6BytesEqual(oCheck, oHash)){
+    const oeKey = await r6ImportKey(await r6IterativeHash(pw, oKeySalt, enc.U, iterative), ["encrypt", "decrypt"]);
+    return {fileKey: await r6DecryptRaw(oeKey, new Uint8Array(16), enc.OE), viaOwner:true};
+  }
+  return null;
+}
+/** AESV3 object encryption: file key, random IV prepended, PKCS#7 padding. */
+async function aesV3EncryptBytes(fileKey, plainBytes){
+  const iv = r6RandomBytes(16);
+  const ct = new Uint8Array(await r6GetSubtle().encrypt({name:"AES-CBC", iv}, fileKey, plainBytes));
+  return r6Concat(iv, ct);
+}
+/** AESV3 object decryption: first 16 bytes are the IV. Throws on bad padding/length. */
+async function aesV3DecryptBytes(fileKey, data){
+  if(data.length < 32 || (data.length - 16) % 16 !== 0) throw new Error("Invalid AESV3 ciphertext length.");
+  const iv = data.subarray(0, 16);
+  const ct = data.subarray(16);
+  return new Uint8Array(await r6GetSubtle().decrypt({name:"AES-CBC", iv}, fileKey, ct));
+}
+/** Replaces every string token in `text` with the AESV3 encryption (hex string) or decryption (hex string) of its bytes. */
+async function aesV3TransformObjectText(text, fileKey, decrypt){
+  let out = "";
+  let i = 0;
+  while(i < text.length){
+    const c = text.charCodeAt(i);
+    if(c===0x25){ // '%' comment to end of line
+      let j=i;
+      while(j<text.length && text.charCodeAt(j)!==0x0A && text.charCodeAt(j)!==0x0D) j++;
+      out += text.slice(i,j); i=j;
+    } else if(c===0x28){ // '('
+      const {bytes, end} = parseLiteralStringBin(text, i);
+      const transformed = decrypt ? await aesV3DecryptBytes(fileKey, bytes) : await aesV3EncryptBytes(fileKey, bytes);
+      out += bytesToHexPdfString(transformed);
+      i = end;
+    } else if(c===0x3C){ // '<'
+      if(text.charCodeAt(i+1)===0x3C){ out += "<<"; i+=2; }
+      else {
+        const {bytes, end} = parseHexStringBin(text, i);
+        const transformed = decrypt ? await aesV3DecryptBytes(fileKey, bytes) : await aesV3EncryptBytes(fileKey, bytes);
+        out += bytesToHexPdfString(transformed);
+        i = end;
+      }
+    } else { out += text[i]; i++; }
+  }
+  return out;
+}
+/** Shared AESV3 rebuild: re-serializes `pdfBytes` with every object's strings/streams encrypted (decrypt=false) or decrypted (decrypt=true) under `fileKey`, regenerating a fresh classic xref table + trailer. `trailerFields` is the literal dict content the caller wants in the new trailer (with /Encrypt for protect, without it for unlock). Handles direct and indirect /Length, since AES changes stream lengths (unlike RC4). */
+async function rebuildPdfWithAesV3Transform(pdfBytes, fileKey, trailerFields, decrypt){
+  const bin = bytesToBinaryString(pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes));
+  const objects = findIndirectObjects(bin);
+  if(!objects.length) throw new Error("No PDF objects found - this file may not be a valid PDF");
+  const plainIntObjects = findPlainIntObjects(bin, objects);
+  objects.sort((a,b)=>a.headerStart-b.headerStart);
+  const lengthUpdates = new Map();
+  const newBodies = new Map();
+  for(const o of objects){
+    const body = bin.slice(o.bodyStart, o.bodyEnd);
+    let streamKwIdx = -1, eol = "";
+    const re = /stream(\r\n|\n)/g;
+    let mm;
+    while((mm = re.exec(body))){
+      const before = mm.index>0 ? body.charCodeAt(mm.index-1) : 0x0A;
+      if(before===0x0A||before===0x0D||before===0x20||before===0x09||before===0x3E){
+        streamKwIdx = mm.index; eol = mm[1]; break;
+      }
+    }
+    if(streamKwIdx === -1){
+      newBodies.set(o.num+"_"+o.gen, await aesV3TransformObjectText(body, fileKey, decrypt));
+      continue;
+    }
+    const header = body.slice(0, streamKwIdx);
+    const payloadStart = streamKwIdx + 6 + eol.length;
+    let length = null, lengthRef = null;
+    const indirectM = /\/Length\s+(\d+)\s+(\d+)\s+R\b/.exec(header);
+    if(indirectM){
+      lengthRef = indirectM[1]+"_"+indirectM[2];
+      const v = plainIntObjects.get(lengthRef);
+      if(v!=null) length = v;
+    }
+    if(length == null){
+      const directM = /\/Length\s+(\d+)\b/.exec(header);
+      if(directM) length = parseInt(directM[1],10);
+    }
+    const endstreamIdx = body.indexOf("endstream", payloadStart);
+    let payloadEnd;
+    if(length!=null && payloadStart+length <= body.length){
+      payloadEnd = payloadStart + length;
+    } else if(endstreamIdx !== -1){
+      payloadEnd = endstreamIdx;
+      if(payloadEnd>0 && body.charCodeAt(payloadEnd-1)===0x0A){ payloadEnd--; if(payloadEnd>0 && body.charCodeAt(payloadEnd-1)===0x0D) payloadEnd--; }
+    } else {
+      throw new Error("Could not determine a stream's length while processing this PDF's structure");
+    }
+    const payloadBytes = binaryStringToBytes(body.slice(payloadStart, payloadEnd));
+    const newPayload = decrypt ? await aesV3DecryptBytes(fileKey, payloadBytes) : await aesV3EncryptBytes(fileKey, payloadBytes);
+    const tail = body.slice(payloadEnd);
+    let newHeader = await aesV3TransformObjectText(header, fileKey, decrypt);
+    if(lengthRef){
+      lengthUpdates.set(lengthRef, newPayload.length);
+    } else {
+      newHeader = newHeader.replace(/\/Length\s+\d+\b/, "/Length " + newPayload.length);
+    }
+    newBodies.set(o.num+"_"+o.gen, newHeader + "stream" + eol + bytesToBinaryString(newPayload) + tail);
+  }
+  const headerText = bin.slice(0, objects[0].headerStart);
+  let out = headerText;
+  const offsetByNum = new Map();
+  let maxNum = 0;
+  for(const o of objects){
+    if(o.num > maxNum) maxNum = o.num;
+    offsetByNum.set(o.num, out.length);
+    const key = o.num+"_"+o.gen;
+    const bodyText = lengthUpdates.has(key) ? String(lengthUpdates.get(key)) : newBodies.get(key);
+    out += `${o.num} ${o.gen} obj\n${bodyText}\nendobj\n`;
+  }
+  const xrefOffset = out.length;
+  const count = maxNum + 1;
+  let xref = `xref\n0 ${count}\n`;
+  xref += "0000000000 65535 f \n";
+  for(let n=1;n<count;n++){
+    if(offsetByNum.has(n)) xref += String(offsetByNum.get(n)).padStart(10,"0") + " 00000 n \n";
+    else xref += "0000000000 65535 f \n";
+  }
+  out += xref;
+  out += `trailer\n<< /Size ${count} ${trailerFields} >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return binaryStringToBytes(out);
+}
+
+/**
+ * Encrypts a PDF with the Standard Security Handler, revision 6 (AES-256,
+ * V=5). `pdfBytes` MUST come from `PDFDocument.save({useObjectStreams:false})`.
+ * `userPassword` may be "" for a permissions-only file (opens without a
+ * password but carries restrictions); `ownerPassword` defaults to the user
+ * password when omitted. Caller is responsible for the runtime self-check
+ * (re-opening the result with pdf.js + the password).
+ * @param {Uint8Array} pdfBytes
+ * @param {{userPassword?:string, ownerPassword?:string, permissions?:object}} opts
+ * @returns {Promise<Uint8Array>}
+ */
+async function encryptPdfBytesAES256(pdfBytes, {userPassword="", ownerPassword, permissions}={}){
+  r6GetSubtle(); // throws a descriptive error early when WebCrypto is unavailable
+  const upw = r6PasswordBytes(userPassword);
+  const opw = r6PasswordBytes(ownerPassword === undefined || ownerPassword === null ? userPassword : ownerPassword);
+  const P = computePermissionsInt(permissions);
+  const fileKeyRaw = r6RandomBytes(32);
+  const fileKey = await r6ImportKey(fileKeyRaw, ["encrypt", "decrypt"]);
+  const uValSalt = r6RandomBytes(8), uKeySalt = r6RandomBytes(8);
+  const uHash = await r6IterativeHash(upw, uValSalt, new Uint8Array(0), true);
+  const U = r6Concat(uHash, uValSalt, uKeySalt);
+  const oValSalt = r6RandomBytes(8), oKeySalt = r6RandomBytes(8);
+  const oHash = await r6IterativeHash(opw, oValSalt, U, true);
+  const O = r6Concat(oHash, oValSalt, oKeySalt);
+  const ueKey = await r6ImportKey(await r6IterativeHash(upw, uKeySalt, new Uint8Array(0), true), ["encrypt"]);
+  const UE = await r6EncryptRaw(ueKey, new Uint8Array(16), fileKeyRaw);
+  const oeKey = await r6ImportKey(await r6IterativeHash(opw, oKeySalt, U, true), ["encrypt"]);
+  const OE = await r6EncryptRaw(oeKey, new Uint8Array(16), fileKeyRaw);
+  // Perms: 16 bytes (P LE, 0xFFFFFFFF, 'T' for EncryptMetadata, 'adb',
+  // 4 random bytes) encrypted as a single AES block (CBC, zero IV == ECB).
+  const permsPlain = r6Concat(
+    (()=>{ const b=new Uint8Array(4); new DataView(b.buffer).setInt32(0, P, true); return b; })(),
+    new Uint8Array([0xFF,0xFF,0xFF,0xFF,0x54,0x61,0x64,0x62]),
+    r6RandomBytes(4)
+  );
+  const Perms = await r6EncryptRaw(fileKey, new Uint8Array(16), permsPlain);
+  const origTrailer = readOriginalTrailer(bytesToBinaryString(pdfBytes));
+  const idHex = origTrailer.idHex || [...r6RandomBytes(16)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  const trailerFields = `/Root ${origTrailer.rootRef}`
+    + (origTrailer.infoRef ? ` /Info ${origTrailer.infoRef}` : "")
+    + ` /Encrypt << /Filter /Standard /V 5 /R 6 /Length 256`
+    + ` /CF << /StdCF << /AuthEvent /DocOpen /CFM /AESV3 /Length 32 >> >>`
+    + ` /StrF /StdCF /StmF /StdCF`
+    + ` /O ${bytesToHexPdfString(O)} /U ${bytesToHexPdfString(U)}`
+    + ` /OE ${bytesToHexPdfString(OE)} /UE ${bytesToHexPdfString(UE)}`
+    + ` /Perms ${bytesToHexPdfString(Perms)} /P ${P} /EncryptMetadata true >>`
+    + ` /ID [${bytesToHexPdfString(hexPairsToBytes(idHex))} ${bytesToHexPdfString(hexPairsToBytes(idHex))}]`;
+  return rebuildPdfWithAesV3Transform(pdfBytes, fileKey, trailerFields, false);
+}
+
+/**
+ * Structure-preserving decrypt for V=5 (AES-256, revisions 5/6) files -
+ * the AES counterpart of tryDecryptSimplePdfBytes(). Verifies the
+ * password against U/O itself (the same check pdf.js performs), recovers
+ * the file key from UE/OE, and decrypts every string/stream in place, so
+ * the result keeps fully vector/text pages. Returns `{notSimple:true}`
+ * for anything else (other V/R values, missing OE/UE, bad padding, a
+ * non-classic-xref file, or any parse hiccup) so the caller falls back
+ * to the render-based flatten path. The password is assumed already
+ * verified by the caller (pdf.js's own getDocument({password})) - the
+ * re-verification here doubles as a sanity check on the parsing.
+ * @param {Uint8Array} pdfBytes
+ * @param {string} password
+ * @returns {Promise<{bytes:Uint8Array}|{notSimple:true}>}
+ */
+async function tryDecryptAesPdfBytes(pdfBytes, password){
+  try{
+    const bin = bytesToBinaryString(pdfBytes);
+    const enc = readExistingEncryptDict(bin);
+    if(!enc || enc.V!==5 || (enc.R!==5 && enc.R!==6)) return {notSimple:true};
+    const recovered = await r6RecoverFileKey(password || "", enc);
+    if(!recovered) return {notSimple:true};
+    const fileKey = await r6ImportKey(recovered.fileKey, ["encrypt", "decrypt"]);
+    const idHex = enc.trailer.idHex || [...r6RandomBytes(16)].map(b=>b.toString(16).padStart(2,"0")).join("");
+    const trailerFields = `/Root ${enc.trailer.rootRef}` + (enc.trailer.infoRef ? ` /Info ${enc.trailer.infoRef}` : "")
+      + ` /ID [${bytesToHexPdfString(hexPairsToBytes(idHex))} ${bytesToHexPdfString(hexPairsToBytes(idHex))}]`;
+    return { bytes: await rebuildPdfWithAesV3Transform(pdfBytes, fileKey, trailerFields, true) };
   }catch(e){
     return {notSimple:true};
   }

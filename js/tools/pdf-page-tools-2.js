@@ -11,6 +11,44 @@
 // this now lives - same fix shape as Phase 11's statusEl()/setStatus()/
 // resultBox() move to pdf-processing-utils.js for the equivalent
 // image-tools.js/"image"-profile gap.
+/* Expands {n} (page number), {p} (total pages) and {date} (today's date)
+   tokens in header/footer text. Pure - the preview (page 1) and the real
+   export call it with the same shape, so what the preview shows is what
+   gets stamped. Unknown {…} sequences are left untouched. */
+function expandHeaderFooterTokens(text, pageNum, totalPages, dateStr){
+  if(!text) return text;
+  const date = dateStr || new Date().toLocaleDateString();
+  return String(text).split("{n}").join(String(pageNum))
+    .split("{p}").join(String(totalPages))
+    .split("{date}").join(date);
+}
+/* Font choices - same list as Page Numbers in pdf-page-tools-1.js, kept
+   as a local copy because the two tools load in different runtime
+   profiles (see the headerFooterAnchor comment above). */
+const HEADER_FOOTER_FONTS = [
+  {key:"Helvetica", label:"Helvetica", css:"Helvetica, Arial, sans-serif"},
+  {key:"HelveticaBold", label:"Helvetica Bold", css:"bold Helvetica, Arial, sans-serif"},
+  {key:"TimesRoman", label:"Times Roman", css:"'Times New Roman', Times, serif"},
+  {key:"Courier", label:"Courier", css:"'Courier New', Courier, monospace"},
+];
+function headerFooterFontCss(key){
+  return (HEADER_FOOTER_FONTS.find(f=>f.key===key) || HEADER_FOOTER_FONTS[0]).css;
+}
+function headerFooterStandardFont(key){
+  return HEADER_FOOTER_FONTS.some(f=>f.key===key) ? key : "Helvetica";
+}
+function headerFooterFontOptions(selectedKey){
+  return HEADER_FOOTER_FONTS.map(f=>`<option value="${f.key}"${f.key===selectedKey?" selected":""}>${f.label}</option>`).join("");
+}
+/* "#rrggbb" -> pdf-lib rgb(); malformed input returns the fallback
+   instead of throwing inside the export handler. (Page Numbers has its
+   own copy - different runtime profile, see above.) */
+function headerFooterRgb(hex, fallback){
+  const m = /^#([0-9a-f]{6})$/i.exec((hex || "").trim());
+  if(!m) return fallback;
+  const n = parseInt(m[1], 16);
+  return rgb(((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255);
+}
 TOOLS.headerfooter = function(){
   const t = window.I18N ? I18N.t : (k)=>k;
   let file=null, pdoc=null, loadToken=0;
@@ -44,6 +82,15 @@ TOOLS.headerfooter = function(){
             <select id="falign"><option value="left" selected>${t("toolHeaderFooter.alignLeft")}</option><option value="center">${t("toolHeaderFooter.alignCenter")}</option><option value="right">${t("toolHeaderFooter.alignRight")}</option></select>
           </div>
           <div class="field"><label for="hfsize">${t("toolHeaderFooter.fontSizeLabel")}</label><input type="number" id="hfsize" value="9" min="6" max="24"></div>
+          <div class="row">
+            <div class="field" style="margin:0"><label for="hffont">${t("toolHeaderFooter.fontLabel")}</label><select id="hffont">${headerFooterFontOptions("Helvetica")}</select></div>
+            <div class="field" style="margin:0"><label for="hfcolor">${t("toolHeaderFooter.colorLabel")}</label><input type="color" id="hfcolor" value="#4d4d4d"></div>
+          </div>
+          <div class="row">
+            <div class="field" style="margin:0"><label for="hfTopMargin">${t("toolHeaderFooter.headerMarginLabel")}</label><input type="number" id="hfTopMargin" value="25" min="5" max="120"></div>
+            <div class="field" style="margin:0"><label for="hfBottomMargin">${t("toolHeaderFooter.footerMarginLabel")}</label><input type="number" id="hfBottomMargin" value="15" min="5" max="120"></div>
+          </div>
+          <p class="mode-info">${t("toolHeaderFooter.tokensHint")}</p>
           <div class="field"><label for="hfpages">${t("toolHeaderFooter.pagesLabel")}</label><input type="text" id="hfpages" placeholder="${t("toolHeaderFooter.pagesPlaceholder")}"></div>
           <div class="split-error" id="hfError" hidden></div>
           <button class="btn tool-toolbar-primary" id="go">${t("tools.headerfooter")}</button>
@@ -86,6 +133,10 @@ TOOLS.headerfooter = function(){
       headerAlign: document.getElementById("halign").value,
       footerAlign: document.getElementById("falign").value,
       fontSize: Math.max(6, parseInt(document.getElementById("hfsize").value) || 9),
+      fontName: headerFooterStandardFont(document.getElementById("hffont").value),
+      colorHex: document.getElementById("hfcolor").value,
+      headerMargin: Math.max(5, parseInt(document.getElementById("hfTopMargin").value) || HEADER_Y_FROM_TOP),
+      footerMargin: Math.max(5, parseInt(document.getElementById("hfBottomMargin").value) || FOOTER_Y),
     };
   }
   function validate(){
@@ -103,35 +154,38 @@ TOOLS.headerfooter = function(){
     if(!pageBgImageData) return;
     const ctx = canvas.getContext("2d");
     ctx.putImageData(pageBgImageData, 0, 0);
-    const {headerText, footerText, headerAlign, footerAlign, fontSize} = currentSettings();
+    const {headerText, footerText, headerAlign, footerAlign, fontSize, fontName, colorHex, headerMargin, footerMargin} = currentSettings();
     const scaledSize = fontSize * dispScale;
-    ctx.font = `${scaledSize}px Helvetica, Arial, sans-serif`;
-    ctx.fillStyle = "rgb(77,77,77)";
+    ctx.font = `${scaledSize}px ${headerFooterFontCss(fontName)}`;
+    ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(colorHex||"") ? colorHex : "#4d4d4d";
     ctx.textBaseline = "alphabetic";
     // pdf-lib's drawText y is the text BASELINE directly, in PDF points
     // (origin bottom-left, y-up) - export draws the header baseline at
-    // height-HEADER_Y_FROM_TOP and the footer baseline at FOOTER_Y. To
+    // height-headerMargin and the footer baseline at footerMargin. To
     // place the SAME baseline on this top-down canvas: canvasY = (pageHeight
     // - pdfBaselineY) * dispScale. For the header that simplifies to
-    // HEADER_Y_FROM_TOP*dispScale; for the footer, to canvas.height -
-    // FOOTER_Y*dispScale. No extra offset belongs here - the PDF y IS the
+    // headerMargin*dispScale; for the footer, to canvas.height -
+    // footerMargin*dispScale. No extra offset belongs here - the PDF y IS the
     // baseline already, unlike a CSS/canvas top-aligned box.
-    const h = winAnsiSafe(headerText);
+    // Tokens expand against page 1's numbers, exactly as the export
+    // expands them per page (see expandHeaderFooterTokens).
+    const totalPages = pdoc ? pdoc.numPages : 1;
+    const h = winAnsiSafe(expandHeaderFooterTokens(headerText, 1, totalPages));
     if(h.trim()){
       const tw = ctx.measureText(h).width / dispScale;
       const x = headerFooterAnchor(headerAlign, page1Size.width, tw, MARGIN_X) * dispScale;
-      const y = HEADER_Y_FROM_TOP * dispScale;
+      const y = headerMargin * dispScale;
       ctx.fillText(h, x, y);
     }
-    const f = winAnsiSafe(footerText);
+    const f = winAnsiSafe(expandHeaderFooterTokens(footerText, 1, totalPages));
     if(f.trim()){
       const tw = ctx.measureText(f).width / dispScale;
       const x = headerFooterAnchor(footerAlign, page1Size.width, tw, MARGIN_X) * dispScale;
-      const y = canvas.height - FOOTER_Y * dispScale;
+      const y = canvas.height - footerMargin * dispScale;
       ctx.fillText(f, x, y);
     }
   }
-  ["htext","ftext","halign","falign","hfsize"].forEach(id=>{
+  ["htext","ftext","halign","falign","hfsize","hffont","hfcolor","hfTopMargin","hfBottomMargin"].forEach(id=>{
     document.getElementById(id).addEventListener("input", redrawPreview);
   });
   document.getElementById("hfpages").addEventListener("input", validate);
@@ -173,25 +227,27 @@ TOOLS.headerfooter = function(){
 
   goBtn.addEventListener("click", withToolOperation(goBtn, async (_event, operation)=>{
     const out=document.getElementById("out"); out.innerHTML=statusEl(T("workspace.statusReadingPdf"));
-    const {headerText, footerText, headerAlign, footerAlign, fontSize} = currentSettings();
-    const h = winAnsiSafe(headerText);
-    const f = winAnsiSafe(footerText);
+    const {headerText, footerText, headerAlign, footerAlign, fontSize, fontName, colorHex, headerMargin, footerMargin} = currentSettings();
     const pagesRaw = document.getElementById("hfpages").value.trim();
     const bytes=await file.arrayBuffer();
     const doc=await loadPdfSafe(bytes);
-    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const font = await doc.embedFont(StandardFonts[fontName]);
+    const stampColor = headerFooterRgb(colorHex, rgb(0.3,0.3,0.3));
     const targetIndices = pagesRaw ? parsePageList(pagesRaw, doc.getPageCount()) : null;
     setStatus(t("toolHeaderFooter.statusApplying"));
+    const totalPages = doc.getPageCount();
     doc.getPages().forEach((p,i)=>{
       if(targetIndices && !targetIndices.includes(i)) return;
+      const h = winAnsiSafe(expandHeaderFooterTokens(headerText, i+1, totalPages));
+      const f = winAnsiSafe(expandHeaderFooterTokens(footerText, i+1, totalPages));
       const {width, height} = p.getSize();
       if(h.trim()){
         const tw = font.widthOfTextAtSize(h, fontSize);
-        p.drawText(h, {x:headerFooterAnchor(headerAlign, width, tw, MARGIN_X), y:height-HEADER_Y_FROM_TOP, size:fontSize, font, color:rgb(0.3,0.3,0.3)});
+        p.drawText(h, {x:headerFooterAnchor(headerAlign, width, tw, MARGIN_X), y:height-headerMargin, size:fontSize, font, color:stampColor});
       }
       if(f.trim()){
         const tw = font.widthOfTextAtSize(f, fontSize);
-        p.drawText(f, {x:headerFooterAnchor(footerAlign, width, tw, MARGIN_X), y:FOOTER_Y, size:fontSize, font, color:rgb(0.3,0.3,0.3)});
+        p.drawText(f, {x:headerFooterAnchor(footerAlign, width, tw, MARGIN_X), y:footerMargin, size:fontSize, font, color:stampColor});
       }
     });
     const outBytes=await doc.save();
@@ -839,6 +895,7 @@ TOOLS.invertpdf = function(){
         <h2 class="tool-hero-title">${t("tools.invertpdf")}</h2>
         <p class="tool-hero-desc">${t("toolInvert.heroDesc")}</p>
       </div>
+      <p class="mode-info">${t("toolInvert.imageNote")}</p>
       <div class="tool-upload-wrap">
         ${fileInputHTML("application/pdf", false, t("workspace.selectPdfFiles"))}
       </div>
@@ -919,6 +976,42 @@ TOOLS.invertpdf = function(){
 // (the common case) shows the exact same plain, uncolored cards Reorder
 // Pages does.
 const ORGANIZE_FILE_COLORS = ["#3B82F6","#8B5CF6","#F5B22D","#EC4899","#06B6D4","#F97316","#6366F1","#F43F5E"];
+/* Organize export that also understands blank cards (see
+   buildPageGrid's insertBlankPage, used by Add Blank Page): the shared
+   buildPdfFromMultiDoc() in pdf-canvas-widgets.js copies by index and
+   has no blank branch, so a blank entry would try to copy page
+   `undefined`. This local builder interleaves fresh blank pages with
+   batched per-source copyPages() runs instead, in grid order. Pure
+   pdf-lib work (no DOM) - unit-tested via tests/parity-page-tools.test.js. */
+async function buildOrganizedPdf(srcDocs, pagesSpec){
+  const newDoc = await PDFDocument.create();
+  let runDoc = -1, runIndices = [], runRots = [];
+  async function flushRun(){
+    if(!runIndices.length) return;
+    const pages = await newDoc.copyPages(srcDocs[runDoc], runIndices);
+    pages.forEach((p,i)=>{
+      const rot = runRots[i];
+      if(rot) p.setRotation(degrees((p.getRotation().angle + rot) % 360));
+      newDoc.addPage(p);
+    });
+    runIndices = []; runRots = [];
+  }
+  for(const spec of pagesSpec){
+    if(spec.blank){
+      await flushRun();
+      const page = newDoc.addPage([spec.width, spec.height]);
+      const rot = spec.rotation || 0;
+      if(rot) page.setRotation(degrees(rot % 360));
+    } else {
+      const d = spec.docIndex || 0;
+      if(d !== runDoc){ await flushRun(); runDoc = d; }
+      runIndices.push(spec.index);
+      runRots.push(spec.rotation || 0);
+    }
+  }
+  await flushRun();
+  return newDoc;
+}
 TOOLS.organize = function(){
   const t = window.I18N ? I18N.t : (k)=>k;
   const entries = []; // {file, color, removed}
@@ -944,6 +1037,11 @@ TOOLS.organize = function(){
           <div class="organize-files" id="organizeFilesList"></div>
           <input type="file" id="organizeAddInput" class="hidden" accept="application/pdf" multiple>
           <button type="button" class="organize-add-btn" id="organizeAddBtn">${t("toolOrganize.addMoreFilesBtn")}</button>
+          <div class="field"><label for="organizeBlankPos">${t("toolOrganize.insertBlankAfterLabel")}</label>
+            <input type="number" id="organizeBlankPos" value="0" min="0">
+          </div>
+          <button type="button" class="btn secondary" id="organizeInsertBlank" style="width:100%">${t("toolOrganize.insertBlankBtn")}</button>
+          <p class="mode-info">${t("toolOrganize.insertBlankHint")}</p>
           <button class="btn tool-toolbar-primary" id="go">${t("tools.organize")}</button>
         </aside>
       </div>
@@ -1049,22 +1147,49 @@ TOOLS.organize = function(){
     e.target.value = "";
   });
 
+  // Blank-page insertion inside Organize (iLovePDF's hover "+" between
+  // pages, as a sidebar control - the grid itself lives in
+  // pdf-canvas-widgets.js and cannot gain a between-cards affordance
+  // without touching that shared file). Reuses buildPageGrid's own
+  // insertBlankPage(), so the blank card is a real card: draggable,
+  // rotatable, removable, and exported as a real blank page by
+  // buildOrganizedPdf() below. Position is 0-based on-screen (0 =
+  // before the first card); it clamps to the end, like Add Blank Page.
+  document.getElementById("organizeInsertBlank").addEventListener("click", async ()=>{
+    if(!gridApi) return;
+    const cardCount = document.querySelectorAll("#pageGrid .page-card").length;
+    const posInput = document.getElementById("organizeBlankPos");
+    const afterIndex = Math.max(0, Math.min(parseInt(posInput.value)||0, cardCount));
+    const card = await gridApi.insertBlankPage(afterIndex);
+    card.scrollIntoView({block:"center"});
+    posInput.max = cardCount+1;
+  });
+
   document.getElementById("go").addEventListener("click", withToolOperation(document.getElementById("go"), async (_event, operation)=>{
     const out=document.getElementById("out"); out.innerHTML=statusEl(t("toolOrganize.statusApplying"));
     const pagesSpec = gridApi.getPages();
     if(pagesSpec.length===0){ toast(t("toolOrganize.errAtLeastOne")); out.innerHTML=""; return; }
-    const usedDocIndexes = [...new Set(pagesSpec.map(p=>p.docIndex))];
+    const usedDocIndexes = [...new Set(pagesSpec.filter(p=>!p.blank).map(p=>p.docIndex))];
     const srcDocs = [];
     for(const idx of usedDocIndexes){
       const bytes = await entries[idx].file.arrayBuffer();
       srcDocs[idx] = await loadPdfSafe(bytes);
     }
-    const newDoc = usedDocIndexes.length>1
-      ? await buildPdfFromMultiDoc(srcDocs, pagesSpec)
-      : await buildPdfFromPages(srcDocs[usedDocIndexes[0]], pagesSpec);
+    // Blank cards in the spec need the blank-aware builder; without any
+    // blank the original two paths run exactly as before (zero behavior
+    // change for the common case).
+    const hasBlank = pagesSpec.some(p=>p.blank);
+    const newDoc = hasBlank
+      ? await buildOrganizedPdf(srcDocs, pagesSpec)
+      : usedDocIndexes.length>1
+        ? await buildPdfFromMultiDoc(srcDocs, pagesSpec)
+        : await buildPdfFromPages(srcDocs[usedDocIndexes[0]], pagesSpec);
     const outBytes=await newDoc.save();
     const blob=new Blob([outBytes],{type:"application/pdf"});
-    const primaryFile = entries[usedDocIndexes[0]].file;
+    // All-blank grid (every real page removed, only inserted blanks
+    // left): there is no source file to name the output after, so fall
+    // back to the first still-loaded entry's name.
+    const primaryFile = usedDocIndexes.length ? entries[usedDocIndexes[0]].file : entries.find(e=>!e.removed).file;
     const outName = usedDocIndexes.length>1 ? "organized.pdf" : suffixedName(primaryFile, "organized", "pdf");
     if(!operation.isCurrent()) return;
     const {url}=downloadBlob(blob,outName);
@@ -1086,6 +1211,7 @@ TOOLS.flatten = function(){
         <h2 class="tool-hero-title">${t("tools.flatten")}</h2>
         <p class="tool-hero-desc">${t("toolFlatten.heroDesc")}</p>
       </div>
+      <p class="mode-info">${t("toolFlatten.fieldsOnlyNote")}</p>
       <div class="tool-upload-wrap">
         ${fileInputHTML("application/pdf", false, t("workspace.selectPdfFiles"))}
       </div>
@@ -1124,6 +1250,128 @@ TOOLS.flatten = function(){
 TOOLS.pdf2jpg = function(){
   const t = window.I18N ? I18N.t : (k)=>k;
   let file=null;
+  /* Self-contained embedded-image enumeration for the Extract-images
+     mode (doc-export-builders.js is not loaded on this tool's runtime
+     profile, so extractPageVisuals/pdfImageToPngBase64 are unavailable
+     here). Same prefix-routed store resolution as resolvePageImageObject
+     in doc-export-builders.js: g_* ids live in page.commonObjs. */
+  function pdf2jpgStoreGet(store, objId, timeoutMs){
+    return new Promise((resolve)=>{
+      if(!store || typeof store.get !== "function"){ resolve(null); return; }
+      let done = false;
+      const timer = setTimeout(()=>{ if(!done){ done = true; resolve(null); } }, timeoutMs);
+      try{
+        store.get(objId, (img)=>{ if(!done){ done = true; clearTimeout(timer); resolve(img || null); } });
+      }catch(e){ if(!done){ done = true; clearTimeout(timer); resolve(null); } }
+    });
+  }
+  async function pdf2jpgResolveImage(page, objId){
+    const isGlobal = String(objId || "").indexOf("g_") === 0;
+    const primary = isGlobal ? page.commonObjs : page.objs;
+    const secondary = isGlobal ? page.objs : page.commonObjs;
+    const first = await pdf2jpgStoreGet(primary, objId, 2000);
+    if(first) return first;
+    return pdf2jpgStoreGet(secondary, objId, 2000);
+  }
+  function rawImageToPngBlob(raw){
+    const canvas = document.createElement("canvas");
+    canvas.width = raw.width; canvas.height = raw.height;
+    const ctx = canvas.getContext("2d");
+    if(raw.bitmap){
+      ctx.drawImage(raw.bitmap, 0, 0, raw.width, raw.height);
+    } else {
+      const imgData = ctx.createImageData(raw.width, raw.height);
+      const src = raw.data;
+      if(raw.kind === 3){ imgData.data.set(src); }
+      else if(raw.kind === 2){
+        for(let p=0, s=0; p<imgData.data.length; p+=4, s+=3){
+          imgData.data[p]=src[s]; imgData.data[p+1]=src[s+1]; imgData.data[p+2]=src[s+2]; imgData.data[p+3]=255;
+        }
+      } else {
+        for(let p=0, s=0; p<imgData.data.length; p+=4, s++){
+          const v = src[s]||0; imgData.data[p]=v; imgData.data[p+1]=v; imgData.data[p+2]=v; imgData.data[p+3]=255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+    return new Promise(res=>canvas.toBlob(res, "image/png"));
+  }
+  function appendDownloadLinks(out, items){
+    if(!items || items.length < 2) return;
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center";
+    const label = document.createElement("span");
+    label.textContent = t("toolJpgFollow.individualFiles") + ":";
+    wrap.appendChild(label);
+    for(const item of items){
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(item.blob);
+      a.download = item.name;
+      a.textContent = item.name;
+      wrap.appendChild(a);
+    }
+    out.appendChild(wrap);
+  }
+  async function runExtractImages(pdoc, operation, out){
+    const seen = new Set();
+    const items = [];
+    for(let i=1;i<=pdoc.numPages;i++){
+      setStatus(t("toolPdf2jpg.statusConvertingPage", {n:i, total:pdoc.numPages}), false, Math.round((i/pdoc.numPages)*100));
+      const page = await pdoc.getPage(i);
+      const opList = await page.getOperatorList();
+      const OPS = pdfjsLib.OPS;
+      let ctm = [1, 0, 0, 1, 0, 0];
+      const stack = [];
+      const mul = (m, cur)=>[
+        m[0]*cur[0]+m[1]*cur[2], m[0]*cur[1]+m[1]*cur[3],
+        m[2]*cur[0]+m[3]*cur[2], m[2]*cur[1]+m[3]*cur[3],
+        m[4]*cur[0]+m[5]*cur[2]+cur[4], m[4]*cur[1]+m[5]*cur[3]+cur[5]
+      ];
+      for(let idx=0; idx<opList.fnArray.length; idx++){
+        const fn = opList.fnArray[idx], args = opList.argsArray[idx];
+        if(fn === OPS.save){ stack.push(ctm.slice()); }
+        else if(fn === OPS.restore){ if(stack.length) ctm = stack.pop(); }
+        else if(fn === OPS.transform){ ctm = mul(args, ctm); }
+        else if(fn === OPS.paintImageXObject || fn === OPS.paintJpegXObject){
+          const w = Math.hypot(ctm[0], ctm[1]), h = Math.hypot(ctm[2], ctm[3]);
+          if(w < 8 || h < 8) continue;
+          const objId = args[0];
+          if(seen.has(objId)) continue;
+          seen.add(objId);
+          const raw = await pdf2jpgResolveImage(page, objId);
+          if(!raw || !(raw.data || raw.bitmap)) continue;
+          const blob = await rawImageToPngBlob(raw);
+          if(blob) items.push({name:`image-${items.length+1}-p${i}.png`, blob});
+        }
+      }
+    }
+    if(!items.length){
+      out.innerHTML = `<div class="status">${t("toolJpgFollow.noImages")}</div>`;
+      return;
+    }
+    setStatus(T("workspace.statusPreparingDownload"));
+    if(items.length === 1){
+      const outName = items[0].name;
+      if(!operation.isCurrent()) return;
+      const {url} = downloadBlob(items[0].blob, outName);
+      const img = document.createElement("img"); img.src = url;
+      setStatus(t("workspace.done"), true);
+      if(!operation.isCurrent()) return;
+      out.appendChild(resultBox({sizeText:fmtSize(items[0].blob.size), sizeGood:true, previewNode:img, url, filename:outName}));
+      return;
+    }
+    await ensureJSZip();
+    const zip = new JSZip();
+    for(const item of items) zip.file(item.name, item.blob);
+    const zipBlob = await zip.generateAsync({type:"blob"});
+    const outName = suffixedName(file, "images", "zip");
+    if(!operation.isCurrent()) return;
+    const {url} = downloadBlob(zipBlob, outName);
+    setStatus(t("workspace.done"), true);
+    if(!operation.isCurrent()) return;
+    out.appendChild(resultBox({sizeText:fmtSize(zipBlob.size), sizeGood:true, url, filename:outName}));
+    appendDownloadLinks(out, items);
+  }
   openPanel(`
     <div class="panel-head"><h3>${t("tools.pdf2jpg")}</h3></div>
     <div class="panel-body compact tool-workspace" id="pdf2jpgBody">
@@ -1134,6 +1382,14 @@ TOOLS.pdf2jpg = function(){
       <div class="tool-upload-wrap">
         ${fileInputHTML("application/pdf", false, t("workspace.selectPdfFiles"))}
       </div>
+      <div id="pdf2jpgOptions" style="display:none">
+        <div class="field"><label for="pdf2jpgMode">${t("toolJpgFollow.modeLabel")}</label>
+          <select id="pdf2jpgMode"><option value="pages">${t("toolJpgFollow.modePages")}</option><option value="extract">${t("toolJpgFollow.modeExtract")}</option></select></div>
+        <div class="field"><label for="pdf2jpgFormat">${t("toolJpgFollow.formatLabel")}</label>
+          <select id="pdf2jpgFormat"><option value="jpg">JPG</option><option value="png">PNG</option></select></div>
+        <div class="field"><label for="pdf2jpgQuality">${t("toolJpgFollow.qualityLabel")}</label>
+          <select id="pdf2jpgQuality"><option value="1">${t("toolJpgFollow.qualityNormal")}</option><option value="2" selected>${t("toolJpgFollow.qualityStandard")}</option><option value="3">${t("toolJpgFollow.qualityHigh")}</option></select></div>
+      </div>
       <p class="tool-privacy-hint">🔒 ${T("workspace.privacyHintFiles")}</p>
       <div class="tool-toolbar" id="pdf2jpgToolbar" style="display:none">
         <button class="btn tool-toolbar-primary" id="go">${t("toolPdf2jpg.convertToJpg")}</button>
@@ -1142,8 +1398,9 @@ TOOLS.pdf2jpg = function(){
     </div>`);
   wireDropzone(fs=>{
     file=fs[0];
-    renderFileList([file], ()=>{ file=null; document.getElementById("pdf2jpgToolbar").style.display="none"; document.getElementById("pdf2jpgBody").classList.remove("is-loaded"); });
+    renderFileList([file], ()=>{ file=null; document.getElementById("pdf2jpgToolbar").style.display="none"; document.getElementById("pdf2jpgOptions").style.display="none"; document.getElementById("pdf2jpgBody").classList.remove("is-loaded"); });
     document.getElementById("pdf2jpgToolbar").style.display="flex";
+    document.getElementById("pdf2jpgOptions").style.display="block";
     document.getElementById("pdf2jpgBody").classList.add("is-loaded");
   });
   document.getElementById("go").addEventListener("click", withToolOperation(document.getElementById("go"), async (_event, operation)=>{
@@ -1151,8 +1408,13 @@ TOOLS.pdf2jpg = function(){
     await ensureJSZip();
     const bytes=await file.arrayBuffer();
     const pdoc = operation.track(await loadPdfJsSafe({data:bytes}));
+    const outMode = document.getElementById("pdf2jpgMode").value;
+    const outFmt = document.getElementById("pdf2jpgFormat").value;
+    const outScale = parseInt(document.getElementById("pdf2jpgQuality").value, 10) || 2;
+    if(outMode === "extract"){ await runExtractImages(pdoc, operation, out); return; }
     const zip = new JSZip();
     let firstBlob=null;
+    const pageBlobs=[];
     // Pages are converted one at a time, never in parallel (no
     // Promise.all over pdoc.numPages) - a big/complex page already needs
     // the CPU and memory to itself; rendering several at once would only
@@ -1172,10 +1434,12 @@ TOOLS.pdf2jpg = function(){
         // adaptivePageRenderTimeoutMs in pdf-canvas-widgets.js) rather
         // than one flat value too short for large/complex pages - that
         // was the real cause of valid PDFs being misreported as broken.
-        const canvas = await renderPdfPageCanvas(pdoc, i, 2);
-        const blob = await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.92));
+        const canvas = await renderPdfPageCanvas(pdoc, i, outScale);
+        const mime = outFmt === "png" ? "image/png" : "image/jpeg";
+        const blob = await new Promise(res=>canvas.toBlob(res, mime, 0.92));
         if(i===1) firstBlob=blob;
-        zip.file(`page_${i}.jpg`, blob);
+        pageBlobs.push({name:`page_${i}.${outFmt}`, blob});
+        zip.file(`page_${i}.${outFmt}`, blob);
         // Canvas is large (page pixels x scale 2) and otherwise only goes
         // out of scope at the next loop iteration - on mobile, dropping
         // the reference immediately (rather than waiting for the next
@@ -1195,7 +1459,7 @@ TOOLS.pdf2jpg = function(){
     }
     setStatus(T("workspace.statusPreparingDownload"));
     if(pdoc.numPages===1){
-      const outName = suffixedName(file, "page1", "jpg");
+      const outName = suffixedName(file, "page1", outFmt);
       if(!operation.isCurrent()) return;
       const {url}=downloadBlob(firstBlob,outName);
       const img=document.createElement("img"); img.src=url;
@@ -1210,6 +1474,7 @@ TOOLS.pdf2jpg = function(){
       setStatus(t("workspace.done"), true);
       if(!operation.isCurrent()) return;
       out.appendChild(resultBox({sizeText:fmtSize(zipBlob.size), sizeGood:true, url, filename:outName}));
+      appendDownloadLinks(out, pageBlobs);
     }
   }));
 };
@@ -1228,18 +1493,36 @@ TOOLS.jpg2pdf = function(){
       <div class="tool-upload-wrap">
         ${fileInputHTML("image/*", true, t("toolJpg2pdf.selectImages"))}
       </div>
+      <div id="jpg2pdfOptions" style="display:none">
+        <div class="field"><label for="jpg2pdfOrientation">${t("toolJpgFollow.orientationLabel")}</label>
+          <select id="jpg2pdfOrientation"><option value="auto" selected>${t("toolJpgFollow.orientationAuto")}</option><option value="portrait">${t("toolJpgFollow.orientationPortrait")}</option><option value="landscape">${t("toolJpgFollow.orientationLandscape")}</option></select></div>
+        <div class="field"><label for="jpg2pdfPageSize">${t("toolJpgFollow.pageSizeLabel")}</label>
+          <select id="jpg2pdfPageSize"><option value="fit" selected>${t("toolJpgFollow.sizeFit")}</option><option value="a4">${t("toolJpgFollow.sizeA4")}</option><option value="letter">${t("toolJpgFollow.sizeLetter")}</option></select></div>
+        <div class="field"><label for="jpg2pdfMargin">${t("toolJpgFollow.marginLabel")}</label>
+          <select id="jpg2pdfMargin"><option value="0" selected>${t("toolJpgFollow.marginNone")}</option><option value="36">${t("toolJpgFollow.marginSmall")}</option><option value="72">${t("toolJpgFollow.marginBig")}</option></select></div>
+        <div class="field"><label><input type="checkbox" id="jpg2pdfMerge" checked> ${t("toolJpgFollow.mergeLabel")}</label></div>
+        <p class="mode-info">${t("toolJpgFollow.separateNote")}</p>
+      </div>
       <div class="tool-toolbar" id="jpg2pdfToolbar" style="display:none">
         <button class="btn tool-toolbar-primary" id="go" disabled>${t("tools.jpg2pdf")}</button>
       </div>
       <div id="out"></div>
     </div>`);
+  const flistDrag = wireFileCardDrag(()=>files, reordered=>{ files = reordered; refresh(); });
   const refresh = ()=>{
     renderFileList(files, i=>{files.splice(i,1); refresh();});
     document.getElementById("go").disabled = files.length<1;
     document.getElementById("jpg2pdfToolbar").style.display = files.length ? "flex" : "none";
+    document.getElementById("jpg2pdfOptions").style.display = files.length ? "block" : "none";
     document.getElementById("jpg2pdfBody").classList.toggle("is-loaded", files.length>0);
+    flistDrag.rewire();
   };
   wireDropzone(fs=>{ files = files.concat(fs.filter(f=>f.type.startsWith("image/"))); refresh(); });
+  const jpg2pdfMarginSel = document.getElementById("jpg2pdfMargin");
+  const jpg2pdfSizeSel = document.getElementById("jpg2pdfPageSize");
+  const syncMarginDisabled = ()=>{ jpg2pdfMarginSel.disabled = jpg2pdfSizeSel.value === "fit"; };
+  jpg2pdfSizeSel.addEventListener("change", syncMarginDisabled);
+  syncMarginDisabled();
   /**
    * Embeds one image file into `doc`, returning the embedded image.
    * The dropzone/file input both accept `image/*` broadly, but the old
@@ -1270,34 +1553,85 @@ TOOLS.jpg2pdf = function(){
   }
   document.getElementById("go").addEventListener("click", withToolOperation(document.getElementById("go"), async (_event, operation)=>{
     const out=document.getElementById("out"); out.innerHTML=statusEl(t("toolJpg2pdf.statusReadingImages"));
-    const doc = await PDFDocument.create();
+    const orientation = document.getElementById("jpg2pdfOrientation").value;
+    const pageSizeOpt = document.getElementById("jpg2pdfPageSize").value;
+    const margin = parseFloat(document.getElementById("jpg2pdfMargin").value) || 0;
+    const mergeAll = document.getElementById("jpg2pdfMerge").checked;
+    const PAGE_SIZES = {a4:[595.28, 841.89], letter:[612, 792]};
+    function pageBoxFor(img){
+      if(pageSizeOpt === "fit") return {w: img.width, h: img.height, margin: 0};
+      let dims = (PAGE_SIZES[pageSizeOpt] || PAGE_SIZES.a4).slice();
+      const landscape = orientation === "landscape" || (orientation === "auto" && img.width >= img.height);
+      if(landscape && dims[1] > dims[0]) dims = [dims[1], dims[0]];
+      if(orientation === "portrait" && dims[0] > dims[1]) dims = [dims[1], dims[0]];
+      return {w: dims[0], h: dims[1], margin};
+    }
+    function drawFitted(page, img, box){
+      const availW = Math.max(1, box.w - box.margin*2), availH = Math.max(1, box.h - box.margin*2);
+      const scale = Math.min(1, availW/img.width, availH/img.height);
+      const w = img.width*scale, h = img.height*scale;
+      page.drawImage(img, {x: box.margin + (availW-w)/2, y: box.margin + (availH-h)/2, width: w, height: h});
+    }
     const failed = [];
-    for(let i=0;i<files.length;i++){
-      setStatus(t("toolJpg2pdf.statusBuildingPdf"), false, Math.round(((i+1)/files.length)*100));
-      const f = files[i];
-      try{
-        const img = await embedImageFile(doc, f);
-        const page = doc.addPage([img.width, img.height]);
-        page.drawImage(img, {x:0,y:0,width:img.width, height:img.height});
-      }catch(e){
-        // One unreadable/corrupt file shouldn't discard everything else
-        // the user already added - skip it and keep going, then report
-        // exactly which file(s) didn't make it into the final PDF.
-        failed.push(f.name);
+    const outputs = [];
+    if(mergeAll){
+      const doc = await PDFDocument.create();
+      for(let i=0;i<files.length;i++){
+        setStatus(t("toolJpg2pdf.statusBuildingPdf"), false, Math.round(((i+1)/files.length)*100));
+        const f = files[i];
+        try{
+          const img = await embedImageFile(doc, f);
+          const box = pageBoxFor(img);
+          const page = doc.addPage([box.w, box.h]);
+          drawFitted(page, img, box);
+        }catch(e){
+          // One unreadable/corrupt file shouldn't discard everything else
+          // the user already added - skip it and keep going, then report
+          // exactly which file(s) didn't make it into the final PDF.
+          failed.push(f.name);
+        }
+      }
+      if(doc.getPageCount() > 0) outputs.push({name:"images.pdf", bytes: await doc.save()});
+    } else {
+      for(let i=0;i<files.length;i++){
+        setStatus(t("toolJpg2pdf.statusBuildingPdf"), false, Math.round(((i+1)/files.length)*100));
+        const f = files[i];
+        try{
+          const doc = await PDFDocument.create();
+          const img = await embedImageFile(doc, f);
+          const box = pageBoxFor(img);
+          const page = doc.addPage([box.w, box.h]);
+          drawFitted(page, img, box);
+          const base = f.name.replace(/\.[^.]+$/, "") || "image";
+          outputs.push({name: base + ".pdf", bytes: await doc.save()});
+        }catch(e){ failed.push(f.name); }
       }
     }
-    if(doc.getPageCount()===0){
+    if(outputs.length===0){
       out.innerHTML = `<div class="status" style="color:var(--rose)">${t("toolJpg2pdf.errNoneReadable")}</div>`;
       return;
     }
     setStatus(T("workspace.statusPreparingDownload"));
-    const outBytes = await doc.save();
-    const blob=new Blob([outBytes],{type:"application/pdf"});
+    const doneMsg = failed.length ? t("toolJpg2pdf.doneWithFailed", {names: failed.join(", ")}) : t("workspace.done");
+    if(outputs.length === 1){
+      const blob=new Blob([outputs[0].bytes],{type:"application/pdf"});
+      if(!operation.isCurrent()) return;
+      const {url}=downloadBlob(blob, outputs[0].name);
+      const {canvas}=await pdfThumb(outputs[0].bytes);
+      setStatus(doneMsg, true);
+      if(!operation.isCurrent()) return;
+      out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:canvas, url, filename:outputs[0].name}));
+      return;
+    }
+    await ensureJSZip();
+    const zip = new JSZip();
+    for(const o of outputs) zip.file(o.name, o.bytes);
+    const zipBlob = await zip.generateAsync({type:"blob"});
+    const outName = suffixedName(files[0], "pdfs", "zip");
     if(!operation.isCurrent()) return;
-    const {url}=downloadBlob(blob,"images.pdf");
-    const {canvas}=await pdfThumb(outBytes);
-    setStatus(failed.length ? t("toolJpg2pdf.doneWithFailed", {names: failed.join(", ")}) : t("workspace.done"), true);
+    const {url}=downloadBlob(zipBlob, outName);
+    setStatus(doneMsg, true);
     if(!operation.isCurrent()) return;
-    out.appendChild(resultBox({sizeText:fmtSize(blob.size), sizeGood:true, previewNode:canvas, url, filename:"images.pdf"}));
+    out.appendChild(resultBox({sizeText:fmtSize(zipBlob.size), sizeGood:true, url, filename:outName}));
   }));
 };

@@ -15,21 +15,23 @@ const CATEGORIES = [
     ["reorder","Reorder Pages"],["deletepages","Delete Pages"],["extractpages","Extract Pages"],["addblank","Add Blank Page"],
     ["edit","Edit PDF"],["headerfooter","Add Header & Footer"],["pagenumbers","Add Page Numbers"],
     ["crop","Crop PDF"],["invertpdf","Invert PDF Colors"],["watermark","Add Watermark"],
+    ["comparepdf","Compare PDF"],["pdfmetadata","Edit PDF Metadata"],["resizepages","Resize Page Size"],
   ]},
   { id:"security", title:"Security", tools:[
     ["protect","Protect PDF"],["unlock","Unlock PDF"],["sign","Sign PDF"],["flatten","Flatten PDF"],
     ["fillform","Fill PDF Form"],
   ]},
   { id:"optimize", title:"Optimize", tools:[
-    ["compress","Compress PDF"],["imgcompress","Image Compressor"],["repair","Repair PDF"],
+    ["compress","Compress PDF"],["imgcompress","Image Compressor"],["repair","Repair PDF"],["pdfcounter","PDF Counter"],
   ]},
   { id:"convert", title:"Convert", tools:[
-    ["jpg2pdf","JPG to PDF"],["pdf2jpg","PDF to JPG"],["pdf2word","PDF to Word"],["word2pdf","Word to PDF"],
+    ["jpg2pdf","Image to PDF"],["pdf2jpg","PDF to JPG"],["pdf2word","PDF to Word"],["word2pdf","Word to PDF"],
     ["pdf2excel","PDF to Excel"],["excel2pdf","Excel to PDF"],["pdf2pptx","PDF to PowerPoint"],["mergeexcel","Merge Excel"],
+    ["extractimages","Extract Images from PDF"],["extracttext","Extract Text from PDF"],["pdf2md","PDF to Markdown"],["scantopdf","Scan to PDF"],
   ]},
   { id:"images", title:"Images", tools:[
     ["imgconvert","Convert Image Format"],["imgresize","Resize Image"],["imgcrop","Crop Image"],
-    ["imgwatermark","Add Watermark to Image"],["imginvert","Invert Image Colors"],
+    ["imgwatermark","Add Watermark to Image"],["imginvert","Invert Image Colors"],["imgrotate","Rotate Image"],
   ]},
 ];
 
@@ -61,8 +63,8 @@ const DESCRIPTIONS = {
   merge:"Combine multiple PDFs into one file, in the order you choose.",
   split:"Break a PDF into separate pages or custom page ranges.",
   compress:"Shrink file size down to an exact KB target you set.",
-  pdf2jpg:"Turn every page of a PDF into a JPG image.",
-  jpg2pdf:"Combine one or more images into a single PDF.",
+  pdf2jpg:"Turn every page of a PDF into images, or pull out the pictures embedded inside it.",
+  jpg2pdf:"Combine images (JPG, PNG, WebP and more) into a PDF, with page size, margins and orientation you choose.",
   pdf2word:"Pull the text out of a PDF into an editable Word file.",
   word2pdf:"Convert a Word document's text into a clean PDF.",
   pdf2excel:"Extract PDF content into rows and columns in Excel.",
@@ -93,6 +95,15 @@ const DESCRIPTIONS = {
   unlock:"Remove a password from a PDF you already know the password to.",
   repair:"Recover a PDF that won't open properly or has a broken structure.",
   pdf2pptx:"Turn every page of a PDF into its own PowerPoint slide.",
+  extractimages:"Pull every embedded image out of a PDF as PNG files.",
+  pdfcounter:"Count pages, words, characters and images in a PDF.",
+  extracttext:"Pull the text out of a PDF into a plain text file.",
+  pdfmetadata:"Change a PDF's title, author, subject and keywords.",
+  pdf2md:"Turn a PDF into Markdown with headings and tables kept.",
+  resizepages:"Resize every PDF page to A4, Letter, Legal or a custom size.",
+  comparepdf:"Compare two PDFs side by side and see what changed.",
+  scantopdf:"Use your camera to scan pages straight into a PDF.",
+  imgrotate:"Rotate an image by 90° steps or any angle you choose.",
 };
 const ICONS = {
   pdf:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/></svg>`,

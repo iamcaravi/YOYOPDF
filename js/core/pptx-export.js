@@ -322,7 +322,7 @@ function pptxPictureShapeXml(id, name, x, y, cx, cy, rId){
     + `<p:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>`
     + `<p:spPr><a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
 }
-function pptxTableCellXml(cell, defaultSizePt){
+function pptxTableCellXml(cell, defaultSizePt, scale){
   const runs = (cell.runs && cell.runs.length) ? cell.runs : [{text: cell.text || "", bold: cell.r0 === 0, size: defaultSizePt}];
   const parasXml = pptxParagraphsXml(runs, cell.align || "left", {fallbackSizePt: defaultSizePt});
   const shade = cell.shadeHex ? `<a:solidFill><a:srgbClr val="${pptxColorHex(cell.shadeHex)}"/></a:solidFill>` : "";
@@ -334,7 +334,7 @@ function pptxTableCellXml(cell, defaultSizePt){
   if(cell.hMerge) attrs.push(`hMerge="1"`);
   if(cell.vMerge) attrs.push(`vMerge="1"`);
   const anchor = cell.vAlign === "bottom" ? "b" : (cell.vAlign === "center" ? "ctr" : "t");
-  const marL = Math.round(Math.max(0, Math.min(20, cell.padLeftPt || 4)) * PPTX_EMU_PER_PT);
+  const marL = Math.round(Math.max(0, Math.min(20, cell.padLeftPt || 4)) * PPTX_EMU_PER_PT * (scale || 1));
   return `<a:tc${attrs.length ? " " + attrs.join(" ") : ""}><a:txBody><a:bodyPr wrap="square" anchor="${anchor}" lIns="${marL}" tIns="22860" rIns="45720" bIns="22860"><a:spAutoFit/></a:bodyPr><a:lstStyle/>${parasXml}</a:txBody><a:tcPr>${ln("lnL")}${ln("lnR")}${ln("lnT")}${ln("lnB")}${shade}</a:tcPr></a:tc>`;
 }
 function pptxTableShapeXml(id, name, x, y, colWidthsEmu, rowHeightsEmu, rowsXml){
@@ -371,22 +371,32 @@ ${shapesXml}
    Coordinates: PDF points, y-up, converted to EMU with the slide sized
    to the page itself (1pt = 12700 EMU), so font sizes and positions
    stay true to the source page. */
-function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx){
+function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx, fit){
+  // `fit` scales an outlier-sized page into the deck's modal slide
+  // size (see pptxDeckPageSize): every position and extent is mapped
+  // through it, including font sizes, so nothing overflows or clips.
+  // With no fit the mapping is the identity (1pt = 12700 EMU), exactly
+  // as before - font sizes and positions stay true to the source page.
+  const fitScale = (fit && Number(fit.scale) > 0) ? Number(fit.scale) : 1;
+  const fitOffX = (fit && Number(fit.offsetXPt)) || 0;
+  const fitOffY = (fit && Number(fit.offsetYPt)) || 0;
   const shapes = [];
-  const toX = pt=>Math.max(0, Math.round(pt * PPTX_EMU_PER_PT));
-  const toY = yFromTopPt=>Math.max(0, Math.round(yFromTopPt * PPTX_EMU_PER_PT));
+  const toX = pt=>Math.max(0, Math.round((fitOffX + pt * fitScale) * PPTX_EMU_PER_PT));
+  const toY = yFromTopPt=>Math.max(0, Math.round((fitOffY + yFromTopPt * fitScale) * PPTX_EMU_PER_PT));
+  const ext = pt=>Math.max(1, Math.round(pt * fitScale * PPTX_EMU_PER_PT));
   function addPicture(block, xPt, yTopPt, wPt, hPt, name){
     if(!block || !block.pngBase64) return;
     const fileName = `image${ctx.mediaCount+1}.png`;
     ctx.mediaCount++;
     media.push({fileName, pngBase64: block.pngBase64});
     const rId = `rId${ctx.mediaCount+1}`;
-    shapes.push(pptxPictureShapeXml(ctx.nextId++, name, toX(xPt), toY(yTopPt), Math.max(1, Math.round(wPt*PPTX_EMU_PER_PT)), Math.max(1, Math.round(hPt*PPTX_EMU_PER_PT)), rId));
+    shapes.push(pptxPictureShapeXml(ctx.nextId++, name, toX(xPt), toY(yTopPt), ext(wPt), ext(hPt), rId));
   }
   function paragraphShape(p, xPt, yTopPt, wPt, fallbackSizePt){
     const text = (p.runs || []).map(r=>r.text || "").join("");
     if(!text.trim()) return;
-    const sizePt = Math.max(...(p.runs || []).map(r=>Number(r.size) || 0), 0) || fallbackSizePt || 12;
+    const scaledRuns = (p.runs || []).map(r=>Object.assign({}, r, r.size != null ? {size: Number(r.size) * fitScale} : {}));
+    const sizePt = (Math.max(...(p.runs || []).map(r=>Number(r.size) || 0), 0) || fallbackSizePt || 12) * fitScale;
     // Estimate wrapped lines from the paragraph's real horizontal
     // extent so a multi-line paragraph gets a tall enough box; the
     // shape's spAutoFit grows it further in PowerPoint if needed.
@@ -394,17 +404,17 @@ function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx){
     const estCharsPerLine = Math.max(10, Math.floor(wPt / avgCharPt));
     const estLines = Math.max(1, Math.ceil(text.length / estCharsPerLine));
     const hPt = Math.max(sizePt * 1.35, estLines * sizePt * 1.25 + 4);
-    shapes.push(pptxTextShapeXml(ctx.nextId++, "TextBox", toX(xPt), toY(yTopPt), Math.max(1, Math.round(wPt*PPTX_EMU_PER_PT)), Math.round(hPt*PPTX_EMU_PER_PT),
-      pptxParagraphsXml(p.runs, p.align, {listItem: p.listItem, fallbackSizePt})));
+    shapes.push(pptxTextShapeXml(ctx.nextId++, "TextBox", toX(xPt), toY(yTopPt), ext(wPt), Math.round(hPt*PPTX_EMU_PER_PT),
+      pptxParagraphsXml(scaledRuns, p.align, {listItem: p.listItem, fallbackSizePt: sizePt})));
   }
   function gridTableShape(tbl){
     const colBounds = tbl.colBounds, rowBounds = tbl.rowBounds;
     if(!colBounds || !rowBounds || !tbl.nCols || !tbl.nRows) return;
     const xPt = colBounds[0], yTopPt = pageHeightPt - rowBounds[0];
     const colWidthsEmu = (tbl.colWidthsPt && tbl.colWidthsPt.length === tbl.nCols)
-      ? tbl.colWidthsPt.map(w=>Math.max(1, Math.round(w*PPTX_EMU_PER_PT)))
-      : Array.from({length: tbl.nCols}, (_, i)=>Math.max(1, Math.round((colBounds[i+1]-colBounds[i])*PPTX_EMU_PER_PT)));
-    const rowHeightsEmu = Array.from({length: tbl.nRows}, (_, r)=>Math.max(228600, Math.round((rowBounds[r]-rowBounds[r+1])*PPTX_EMU_PER_PT)));
+      ? tbl.colWidthsPt.map(w=>ext(w))
+      : Array.from({length: tbl.nCols}, (_, i)=>ext(colBounds[i+1]-colBounds[i]));
+    const rowHeightsEmu = Array.from({length: tbl.nRows}, (_, r)=>Math.max(ext(18), ext(rowBounds[r]-rowBounds[r+1])));
     // Build a coverage map so spanned cells emit exactly one master
     // <a:tc> and hMerge/vMerge placeholders for the cells they cover -
     // a DrawingML table row must contain exactly nCols <a:tc> elements.
@@ -420,8 +430,9 @@ function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx){
       const cellsXml = [];
       for(let c=0; c<tbl.nCols; c++){
         const cell = covered[r][c] || {text:"", r0:r, c0:c};
-        const sizePt = (cell.runs && cell.runs.length) ? Math.max(...cell.runs.map(x=>Number(x.size)||0), 0) || 11 : 11;
-        cellsXml.push(pptxTableCellXml(Object.assign({bordered: tbl.bordered !== false}, cell), sizePt));
+        const sizePt = (((cell.runs && cell.runs.length) ? Math.max(...cell.runs.map(x=>Number(x.size)||0), 0) || 11 : 11)) * fitScale;
+        const scaledCell = Object.assign({}, cell, (cell.runs && cell.runs.length) ? {runs: cell.runs.map(x=>Object.assign({}, x, x.size != null ? {size: Number(x.size) * fitScale} : {}))} : {});
+        cellsXml.push(pptxTableCellXml(Object.assign({bordered: tbl.bordered !== false}, scaledCell), sizePt, fitScale));
       }
       rowsXml.push(`<a:tr h="${rowHeightsEmu[r]}">${cellsXml.join("")}</a:tr>`);
     }
@@ -446,9 +457,9 @@ function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx){
     const marginPt = 36;
     const wPt = pageWidthPt - marginPt*2;
     const colW = wPt / nCols;
-    const rowH = 18;
+    const rowH = 18 * fitScale;
     const yTopPt = pageHeightPt - (tbl._y || pageHeightPt) - 14;
-    const colWidthsEmu = Array.from({length: nCols}, ()=>Math.round(colW*PPTX_EMU_PER_PT));
+    const colWidthsEmu = Array.from({length: nCols}, ()=>ext(colW));
     const rowHeightsEmu = rows.map(()=>Math.round(rowH*PPTX_EMU_PER_PT));
     const rowsXml = rows.map((row, ri)=>{
       let cellsXml = "";
@@ -456,11 +467,11 @@ function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx){
       row.forEach(cell=>{
         const span = Math.max(1, Math.min(cell.span || 1, nCols - col));
         const text = cell.text || "";
-        const runs = [{text, bold: ri === 0, size: 11}];
-        cellsXml += pptxTableCellXml({text, runs, r0: ri, c0: col, colSpan: span, rowSpan: 1, bordered: true}, 11);
+        const runs = [{text, bold: ri === 0, size: 11 * fitScale}];
+        cellsXml += pptxTableCellXml({text, runs, r0: ri, c0: col, colSpan: span, rowSpan: 1, bordered: true}, 11 * fitScale, fitScale);
         col += span;
       });
-      while(col < nCols){ cellsXml += pptxTableCellXml({text:"", runs:[{text:"", size:11}], r0:ri, c0:col, colSpan:1, rowSpan:1, bordered:true}, 11); col++; }
+      while(col < nCols){ cellsXml += pptxTableCellXml({text:"", runs:[{text:"", size:11 * fitScale}], r0:ri, c0:col, colSpan:1, rowSpan:1, bordered:true}, 11 * fitScale, fitScale); col++; }
       return `<a:tr h="${rowHeightsEmu[ri]}">${cellsXml}</a:tr>`;
     }).join("");
     shapes.push(pptxTableShapeXml(ctx.nextId++, "Table", toX(marginPt), toY(yTopPt), colWidthsEmu, rowHeightsEmu, rowsXml));
@@ -503,7 +514,7 @@ function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx){
       const yTopPt = pageHeightPt - (block._y || 0);
       const xPt = block.xLeft != null ? block.xLeft : 36;
       const wPt = Math.max(20, (block.xRight != null ? block.xRight : pageWidthPt - 36) - xPt);
-      shapes.push(`<p:sp><p:nvSpPr><p:cNvPr id="${ctx.nextId++}" name="Separator"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${toX(xPt)}" y="${toY(yTopPt)}"/><a:ext cx="${Math.round(wPt*PPTX_EMU_PER_PT)}" cy="12700"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="999999"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`);
+      shapes.push(`<p:sp><p:nvSpPr><p:cNvPr id="${ctx.nextId++}" name="Separator"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${toX(xPt)}" y="${toY(yTopPt)}"/><a:ext cx="${ext(wPt)}" cy="${Math.round(12700*fitScale)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="999999"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`);
     }
     // "pagebreak" / "pagelayout" blocks never reach here: each PDF
     // page is already its own slide in the caller.
@@ -522,12 +533,32 @@ function pptxShapesForPage(blocks, pageWidthPt, pageHeightPt, media, ctx){
  * @param {string} [title]
  * @returns {Promise<Blob>}
  */
+/* A PPTX has ONE slide size for the whole deck, so a mixed-size PDF
+   cannot keep every page's size. The deck uses the modal (most common)
+   page size; outlier pages are letterboxed into it (see the `fit`
+   argument of pptxShapesForPage) instead of overflowing/clipping.
+   Returns the slide size in points plus how many pages were scaled,
+   so the caller can say so in its status message. Ties go to the
+   first page's size. */
+function pptxDeckPageSize(pages){
+  const counts = new Map();
+  (pages || []).forEach(p=>{
+    const key = `${Math.round(p.pageWidthPt || 612)}x${Math.round(p.pageHeightPt || 792)}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  let bestKey = null, bestCount = 0;
+  counts.forEach((c, k)=>{ if(c > bestCount){ bestCount = c; bestKey = k; } });
+  const parts = (bestKey || "612x792").split("x");
+  const slideWidthPt = Number(parts[0]) || 612, slideHeightPt = Number(parts[1]) || 792;
+  const scaledCount = (pages || []).filter(p=>Math.round(p.pageWidthPt || 612) !== slideWidthPt || Math.round(p.pageHeightPt || 792) !== slideHeightPt).length;
+  return {slideWidthPt, slideHeightPt, scaledCount};
+}
 async function buildEditablePptx(pages, title){
   if(!pages || !pages.length) throw new Error("No pages to convert");
   await ensureJSZip();
-  const first = pages[0];
-  const slideW = Math.max(1, Math.round((first.pageWidthPt || 612) * PPTX_EMU_PER_PT));
-  const slideH = Math.max(1, Math.round((first.pageHeightPt || 792) * PPTX_EMU_PER_PT));
+  const deckSize = pptxDeckPageSize(pages);
+  const slideW = Math.max(1, Math.round(deckSize.slideWidthPt * PPTX_EMU_PER_PT));
+  const slideH = Math.max(1, Math.round(deckSize.slideHeightPt * PPTX_EMU_PER_PT));
   const zip = new JSZip();
   const slideOverrides = [];
   const sldIdEntries = [];
@@ -536,11 +567,14 @@ async function buildEditablePptx(pages, title){
   for(let i=0;i<pages.length;i++){
     const n = i+1;
     const page = pages[i];
-    const pageWidthPt = page.pageWidthPt || first.pageWidthPt || 612;
-    const pageHeightPt = page.pageHeightPt || first.pageHeightPt || 792;
+    const pageWidthPt = page.pageWidthPt || deckSize.slideWidthPt;
+    const pageHeightPt = page.pageHeightPt || deckSize.slideHeightPt;
     const media = [];
     const ctx = {nextId: 2, mediaCount: 0};
-    const shapesXml = pptxShapesForPage(page.blocks || [], pageWidthPt, pageHeightPt, media, ctx);
+    // Letterbox this page into the modal slide size, centred.
+    const fitScale = Math.min(deckSize.slideWidthPt / pageWidthPt, deckSize.slideHeightPt / pageHeightPt);
+    const fit = {scale: fitScale, offsetXPt: (deckSize.slideWidthPt - pageWidthPt * fitScale) / 2, offsetYPt: (deckSize.slideHeightPt - pageHeightPt * fitScale) / 2};
+    const shapesXml = pptxShapesForPage(page.blocks || [], pageWidthPt, pageHeightPt, media, ctx, fit);
     if(media.length) hasPng = true;
     media.forEach(m=> zip.file(`ppt/media/${m.fileName}`, m.pngBase64, {base64:true}));
     zip.file(`ppt/slides/slide${n}.xml`, pptxEditableSlideXml(shapesXml));
