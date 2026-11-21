@@ -242,3 +242,29 @@ describe("PDF to PowerPoint: end-to-end from a real PDF", () => {
     assertXmlBalanced(files["ppt/slides/slide1.xml"], "slide1.xml");
   });
 });
+
+// Regression (live-verified 21 Nov 2026): the pdf2pptx click handler
+// declared `const pages = []` INSIDE its extraction try block, then
+// called pptxDeckPageSize(pages) AFTER the catch - out of scope, so
+// every conversion died at 95% with "pages is not defined" and no
+// download. The handler is DOM-heavy, so this guards the scoping at
+// source level (same style as the routes smoke checks): the `pages`
+// declaration must sit before the extraction try block that fills it.
+describe("PDF to PowerPoint: tool handler scoping (regression)", () => {
+  it("declares `pages` before the extraction try block so the post-catch pptxDeckPageSize(pages) call can see it", () => {
+    const src = readFileSync(resolve(ROOT, "js/tools/pdf-convert-tools.js"), "utf8");
+    const start = src.indexOf("TOOLS.pdf2pptx = function()");
+    expect(start).toBeGreaterThan(-1);
+    const end = src.indexOf("Excel to PDF measured table layout", start);
+    const handler = src.slice(start, end > -1 ? end : start + 12000);
+    // The out-of-try reference that threw:
+    expect(handler).toContain("pptxDeckPageSize(pages)");
+    const pdocIdx = handler.indexOf("const pdoc = operation.track");
+    expect(pdocIdx).toBeGreaterThan(-1);
+    const innerTryIdx = handler.lastIndexOf("try{", pdocIdx);
+    expect(innerTryIdx).toBeGreaterThan(-1);
+    const declIdx = handler.search(/\b(let|var|const)\s+pages\s*=/);
+    expect(declIdx).toBeGreaterThan(-1);
+    expect(declIdx).toBeLessThan(innerTryIdx);
+  });
+});

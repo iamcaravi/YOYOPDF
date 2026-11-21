@@ -1271,13 +1271,16 @@ TOOLS.pdf2pptx = function(){
     for(const file of files){
     const bytes=await file.arrayBuffer();
     let blob;
+    // `pages` is declared out here, not inside the try: pptxDeckPageSize
+    // reads it after the catch below, and a const inside the try block
+    // is out of scope there ("pages is not defined" at 95%).
+    let pages = [];
     let imageFallbackPages = 0, totalPages = 0;
     try{
       const pdoc = operation.track(await loadPdfJsSafe({data:bytes}));
       const pageRange = parseConverterPageRange(rangeText, pdoc.numPages);
       if(pageRange.error){ out.innerHTML = `<div class="status" style="color:var(--rose)">${t("toolConvert.pageRangeInvalid")}</div>`; return; }
       totalPages = pageRange.pages ? pageRange.pages.size : pdoc.numPages;
-      const pages = [];
       for(let i=1;i<=pdoc.numPages;i++){
         if(pageRange.pages && !pageRange.pages.has(i)) continue;
         setStatus(t("toolPdf2pptx.statusExtracting"), false, Math.round((i/pdoc.numPages)*90));

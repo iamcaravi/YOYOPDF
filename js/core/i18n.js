@@ -1040,6 +1040,16 @@
     "toolJpgFollow.marginBig":"Big margin",
     "toolJpgFollow.mergeLabel":"Merge all images in one PDF file",
     "toolJpgFollow.separateNote":"Uncheck to make one PDF per image, downloaded as a ZIP.",
+    /* ---- New-tool card descriptions (append-only; do not reorder) ---- */
+    "toolDesc.comparepdf":"Compare two PDFs side by side and highlight added and removed words.",
+    "toolDesc.pdfmetadata":"View and edit a PDF's title, author and other document info.",
+    "toolDesc.resizepages":"Change every page to A4, Letter, Legal or a custom size.",
+    "toolDesc.pdfcounter":"Count pages, words, characters and images in a PDF.",
+    "toolDesc.extractimages":"Save every picture embedded in a PDF as its own image file.",
+    "toolDesc.extracttext":"Pull all the text out of a PDF into a plain text file.",
+    "toolDesc.pdf2md":"Convert a PDF into Markdown with headings, tables and lists preserved.",
+    "toolDesc.scantopdf":"Photograph pages with your camera or upload photos and build one PDF.",
+    "toolDesc.imgrotate":"Rotate an image 90°, 180° or 270° in one click.",
   }};
 
   /* ---- Hindi ---- */
@@ -2001,6 +2011,16 @@
     "toolJpgFollow.marginBig":"बड़ा मार्जिन",
     "toolJpgFollow.mergeLabel":"सभी इमेज को एक ही PDF में मिलाएं",
     "toolJpgFollow.separateNote":"अलग-अलग PDF बनाने के लिए टिक हटाएं, ZIP के रूप में डाउनलोड होंगी।",
+    /* ---- New-tool card descriptions (append-only; do not reorder) ---- */
+    "toolDesc.comparepdf":"दो PDF की तुलना साथ-साथ करें और जोड़े व हटाए गए शब्द देखें।",
+    "toolDesc.pdfmetadata":"PDF का शीर्षक, लेखक और अन्य जानकारी देखें और बदलें।",
+    "toolDesc.resizepages":"हर पेज को A4, Letter, Legal या कस्टम आकार में बदलें।",
+    "toolDesc.pdfcounter":"PDF में पेज, शब्द, अक्षर और इमेज गिनें।",
+    "toolDesc.extractimages":"PDF के अंदर की हर तस्वीर अलग इमेज फ़ाइल के रूप में सहेजें।",
+    "toolDesc.extracttext":"PDF का सारा टेक्स्ट एक सादी टेक्स्ट फ़ाइल में निकालें।",
+    "toolDesc.pdf2md":"PDF को Markdown में बदलें — शीर्षक, तालिकाएं और सूचियां सुरक्षित रहती हैं।",
+    "toolDesc.scantopdf":"कैमरे से पेज की फोटो लें या फोटो अपलोड करके एक PDF बनाएं।",
+    "toolDesc.imgrotate":"इमेज को एक क्लिक में 90°, 180° या 270° घुमाएं।",
   };
 
   /* ---- Spanish ---- */
